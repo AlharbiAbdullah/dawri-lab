@@ -1,0 +1,20 @@
+[project]
+name = "dawri"
+version = "0.1.0"
+description = "Saudi Pro League data product: ESPN raw -> DuckDB -> dbt marts -> dashboard"
+requires-python = ">=3.14"
+dependencies = [
+    "httpx>=0.28.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.6",
+    "ty>=0.0.79",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "S", "ANN", "PTH", "DTZ"]
