@@ -1,4 +1,4 @@
-# dawri
+# dawri-lab
 
 Saudi Pro League data product, built lesson by lesson in
 `~/helm/06-learning/python-programming/python-project-building/`.

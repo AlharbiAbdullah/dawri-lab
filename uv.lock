@@ -25,7 +25,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dawri"
+name = "dawri-lab"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
