@@ -5,6 +5,7 @@ description = "Saudi Pro League data product: ESPN raw -> DuckDB -> dbt marts ->
 requires-python = ">=3.14"
 dependencies = [
     "httpx>=0.28.1",
+    "pydantic>=2.13.5",
 ]
 
 [dependency-groups]
