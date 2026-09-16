@@ -83,7 +83,9 @@ def plant_records(matches: list[dict]) -> dict[str, dict]:
         for match in matches
         if match["matchId"] == "spl::Football_Match::ff995f1389cb4c93b0e5513a46ef2ec3"
     )
-    planted = {label: copy.deepcopy(first) for label in ("p1", "p2", "p3", "p4", "p5", "p6")}
+    planted = {
+        label: copy.deepcopy(first) for label in ("p1", "p2", "p3", "p4", "p5", "p6")
+    }
     planted["p7"] = copy.deepcopy(first_win)
     planted["p8"] = copy.deepcopy(first)
 

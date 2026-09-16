@@ -212,33 +212,49 @@ def main() -> None:
             request_count += 1
             teamstats_json = json.loads(teamstats)
             if teamstats_json.get("stats") is not None:
-                write_teamstats(teamstats=teamstats, season_id=season_id, match_id=match_id_cleaned)
+                write_teamstats(
+                    teamstats=teamstats,
+                    season_id=season_id,
+                    match_id=match_id_cleaned,
+                )
                 print(f"landed {len(teamstats_json)} teamstats for {season_text}")
             time.sleep(0.5)
         else:
             teamstats_json = json.loads(
-                teamstats_path(season_id=season_id, match_id=match_id_cleaned).read_bytes()
+                teamstats_path(
+                    season_id=season_id, match_id=match_id_cleaned
+                ).read_bytes()
             )
 
     # fetch the playerstats and load it into a file
     for match in matches_json["matches"]:
         match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
-        if not playerstats_path(season_id=season_id, match_id=match_id_cleaned).exists():
-            playerstats = fetch_playerstats(season_id=season_id, match_id=match["matchId"])
+        if not playerstats_path(
+            season_id=season_id, match_id=match_id_cleaned
+        ).exists():
+            playerstats = fetch_playerstats(
+                season_id=season_id, match_id=match["matchId"]
+            )
             request_count += 1
             playerstats_json = json.loads(playerstats)
             if playerstats_json.get("players") is not None:
                 write_playerstats(
-                    playerstats=playerstats, season_id=season_id, match_id=match_id_cleaned
+                    playerstats=playerstats,
+                    season_id=season_id,
+                    match_id=match_id_cleaned,
                 )
                 print(f"landed {len(playerstats_json)} playerstats for {season_text}")
             time.sleep(0.5)
         else:
             playerstats_json = json.loads(
-                playerstats_path(season_id=season_id, match_id=match_id_cleaned).read_bytes()
+                playerstats_path(
+                    season_id=season_id, match_id=match_id_cleaned
+                ).read_bytes()
             )
 
-    landed_matches = json.loads(matches_path(season_id=season_id).read_bytes())["matches"]
+    landed_matches = json.loads(matches_path(season_id=season_id).read_bytes())[
+        "matches"
+    ]
     print(f"requests: {request_count}")
     print(f"matches: {len(landed_matches)}")
     print(f"distinct: {len({match['matchId'] for match in landed_matches})}")

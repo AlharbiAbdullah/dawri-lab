@@ -8,5 +8,5 @@
     }
   },
   "ruff.importStrategy": "fromEnvironment",
-  "python.defaultInterpreterPath": ".venv/bin/python"
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
 }
