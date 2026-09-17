@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Saudi Pro League data product: ESPN raw -> DuckDB -> dbt marts -> dashboard"
 requires-python = ">=3.14"
 dependencies = [
+    "dbt>=2.0.4",
     "duckdb>=1.5.5",
     "httpx>=0.28.1",
     "pyarrow>=25.0.1",
@@ -16,6 +17,7 @@ dev = [
     "marimo>=0.24.0",
     "rich>=15.0.0",
     "ruff>=0.16.6",
+    "shandy-sqlfmt>=0.32.0",
     "ty>=0.0.79",
 ]
 

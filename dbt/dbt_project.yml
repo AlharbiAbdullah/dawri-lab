@@ -1,0 +1,8 @@
+name: dawri
+profile: dawri
+version: "1.0"
+model-paths: ["models"]
+
+models:
+  dawri:
+    +static_analysis: strict

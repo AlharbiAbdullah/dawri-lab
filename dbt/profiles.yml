@@ -1,0 +1,7 @@
+dawri:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../data/dawri.duckdb
+      schema: staging

@@ -2,3 +2,7 @@
 __pycache__/
 data/
 .ruff_cache/
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
