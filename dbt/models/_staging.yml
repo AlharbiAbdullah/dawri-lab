@@ -1,0 +1,43 @@
+models:
+  - name: stg_matches
+    columns:
+      - name: match_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_matchdays
+    columns:
+      - name: matchday_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_playerstats
+    columns:
+      - name: player_stat_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_standings
+    columns:
+      - name: standing_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_teams
+    columns:
+      - name: team_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_teamstats
+    columns:
+      - name: team_stat_key
+        data_tests:
+          - unique
+          - not_null
+

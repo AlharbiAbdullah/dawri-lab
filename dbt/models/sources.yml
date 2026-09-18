@@ -3,4 +3,9 @@ sources:
     schema: raw
     tables:
       - name: matches
-  
+      - name: matchdays
+      - name: standings
+      - name: teams 
+      - name: teamstats 
+      - name: playerstats 
+

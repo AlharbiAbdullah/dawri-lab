@@ -371,8 +371,7 @@ select type, sum(won) from {{ ref('stg_standings') }} group by 1
 
 **Withheld, all of them "how", none of them "what":** how a list of
 structs holding JSON text becomes the twelve typed columns above.
-How one key column is built from a two- or three-column grain
-without a dbt package. What staging does to get from 1,387,916
+How one key column is built from a two- or three-column grain. What staging does to get from 1,387,916
 rows to 1,370,733. And whether each model is a view or a table:
 1.37 million rows either recompute on every query or sit on disk,
 and that choice is per model.
@@ -436,8 +435,12 @@ which ones do. Stat values stay numbers.
 they are columns, with the names and types in step 5.
 - Exactly one `unique` and one `not_null` test per model, on its
 key. The `Summary:` total is exact because of this rule.
-- No dbt packages this lesson. What `dbt_utils` would give you, you
-write.
+- Use the tools people use. dbt packages (`dbt_utils`,
+`dbt_expectations`, ...), macros and dbt's own features are
+encouraged: the point of working in dbt is exposure to its
+ecosystem. Add a package through `packages.yml`, run `dbt deps`,
+commit `package-lock.yml`. Know what the macro compiles to
+(`dbt compile` shows it), so you can defend it.
 
 
 
