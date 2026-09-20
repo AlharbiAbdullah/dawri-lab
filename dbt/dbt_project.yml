@@ -6,3 +6,6 @@ model-paths: ["models"]
 models:
   dawri:
     +static_analysis: strict
+    marts:
+      +materialized: table
+      +schema: marts 

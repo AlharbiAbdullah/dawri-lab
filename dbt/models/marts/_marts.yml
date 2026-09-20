@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: mart_standings
+    columns:
+      - name: standing_key
+        data_tests:
+          - unique
+          - not_null
+
+      - name: type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['table', 'home', 'away']
+
+      - name: rank
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 1
+                max_value: 18
+
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_equal:
+          arguments:
+            value: 54
+
+      - dbt_utils.equality:
+          arguments:
+            compare_model: ref('stg_standings')
+            compare_columns:
+              - standing_key
+              - type
+              - rank
+              - team_id
+              - team_name
+              - played
+              - won
+              - drawn
+              - lost
+              - goals_for
+              - goals_against
+              - goal_difference
+              - points
