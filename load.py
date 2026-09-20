@@ -10,6 +10,13 @@ import contracts
 
 # configs
 DATA_GLOB = Path("data")
+# the folder a family reads from, when it is not the family name itself
+FAMILY_DIRS = {
+    "lineup_events": "lineups",
+    "match_facts": "matchfacts",
+    "match_officials": "matchfacts",
+    "feed_events": "feed",
+}
 DB_PATH = Path("data/dawri.duckdb")
 
 
@@ -20,6 +27,38 @@ def validate_data(data: list, contract: type[BaseModel], id_key: str) -> None:
         except ValidationError as e:
             print(f"error {row[id_key]}:{e.errors()}")
             raise SystemExit(1)
+
+
+# the home or away slot of a feed event, whichever one is filled
+def feed_event_side(event: dict) -> str | None:
+    if event.get("home") is not None:
+        return "home"
+    if event.get("away") is not None:
+        return "away"
+    return None
+
+
+# one feed event, flattened out of the slot it happened in
+def unpack_feed_event(match_id: str, event: dict) -> dict:
+    side = feed_event_side(event)
+    slot = event[side] if side else {}
+    player = slot.get("player") or {}
+    return {
+        "matchId": match_id,
+        "eventId": event["eventId"],
+        "type": event["type"],
+        "label": event["label"],
+        "side": side,
+        "teamId": (slot.get("team") or {}).get("teamId"),
+        "playerId": player.get("playerId"),
+        "relatedPlayerId": player.get("relatedPlayerId"),
+        "time": slot.get("time"),
+        "additionalTime": slot.get("additionalTime"),
+        "phase": slot.get("phase") or event.get("phase"),
+        "homeScorePush": event.get("homeScorePush"),
+        "awayScorePush": event.get("awayScorePush"),
+        "timeStamp": event["timeStamp"],
+    }
 
 
 def unpack_json_pattern(data_family: str, data: dict) -> list[dict]:
@@ -43,6 +82,83 @@ def unpack_json_pattern(data_family: str, data: dict) -> list[dict]:
             for team in block["teams"]
         ]
 
+    elif data_family == "lineups":
+        return [
+            {
+                "matchId": data["matchId"],
+                "teamId": data[side]["teamId"],
+                "side": side,
+                "selection": selection,
+                "tacticalFormation": data[side]["tacticalFormation"],
+                "playerId": player["playerId"],
+                "bibNumber": player["bibNumber"],
+                "role": player["role"],
+                "roleLabel": player["roleLabel"],
+                "shortName": player["shortName"],
+                "shirtName": player["shirtName"],
+                "nationality": player["nationality"],
+                "nationalityIsoCode": player["nationalityIsoCode"],
+                "isCaptain": player["isCaptain"],
+                "isGoalkeeper": player["isGoalkeeper"],
+                "tacticalXPosition": player["tacticalXPosition"],
+                "tacticalYPosition": player["tacticalYPosition"],
+            }
+            for side in ("home", "away")
+            for selection in ("fielded", "benched")
+            for player in data[side][selection]
+        ]
+
+    elif data_family == "lineup_events":
+        return [
+            {
+                "matchId": data["matchId"],
+                "teamId": data[side]["teamId"],
+                "playerId": player["playerId"],
+                "type": event["type"],
+                "label": event["label"],
+                "time": event["time"],
+                "additionalTime": event["additionalTime"],
+                "relatedPlayerId": event["relatedPlayerId"],
+                "phase": event["phase"],
+            }
+            for side in ("home", "away")
+            for selection in ("fielded", "benched")
+            for player in data[side][selection]
+            for event in player["events"] or []
+        ]
+
+    elif data_family == "match_facts":
+        return [
+            {
+                "matchId": data["matchId"],
+                "stadiumId": data["stadium"]["stadiumId"],
+                "stadiumName": data["stadium"]["stadiumName"],
+                "cityName": data["location"]["cityName"],
+                "numberOfSpectators": data["enviroment"]["numberOfSpectators"],
+                "mapsGeoCodeLatitude": data["stadium"]["mapsGeoCodeLatitude"],
+                "mapsGeoCodeLongitude": data["stadium"]["mapsGeoCodeLongitude"],
+            }
+        ]
+
+    elif data_family == "match_officials":
+        return [
+            {
+                "matchId": data["matchId"],
+                "refereeId": referee["refereeId"],
+                "role": referee["role"],
+                "roleLabel": referee["roleLabel"],
+                "shortName": referee["shortName"],
+                "nationality": referee["nationality"],
+            }
+            for referee in data["referees"]
+        ]
+
+    elif data_family == "feed_events":
+        return [
+            unpack_feed_event(match_id=data["matchId"], event=event)
+            for event in data["events"]
+        ]
+
     elif data_family == "teamstats":
         return [{**stat, "matchId": data["matchId"]} for stat in data["stats"]]
     elif data_family == "playerstats":
@@ -63,7 +179,7 @@ def unpack_json_pattern(data_family: str, data: dict) -> list[dict]:
 def read_data_from_json(data_path: Path, data_name: str) -> list[dict]:
     """read data from a json file into a python list of dicts"""
     data_list: list[dict] = []
-    full_path = data_path / data_name
+    full_path = data_path / FAMILY_DIRS.get(data_name, data_name)
     for file in full_path.rglob("*.json"):
         with file.open("r") as f:
             data = json.load(f)
@@ -93,6 +209,11 @@ if __name__ == "__main__":
     standings = read_data_from_json(DATA_GLOB, "standings")
     teamstats = read_data_from_json(DATA_GLOB, "teamstats")
     playerstats = read_data_from_json(DATA_GLOB, "playerstats")
+    lineups = read_data_from_json(DATA_GLOB, "lineups")
+    lineup_events = read_data_from_json(DATA_GLOB, "lineup_events")
+    match_facts = read_data_from_json(DATA_GLOB, "match_facts")
+    match_officials = read_data_from_json(DATA_GLOB, "match_officials")
+    feed_events = read_data_from_json(DATA_GLOB, "feed_events")
     validate_data(matches, contracts.MatchContract, id_key="matchId")
     load_data_to_duckdb("matches", matches, "raw")
     load_data_to_duckdb("matchdays", matchdays, "raw")
@@ -100,6 +221,11 @@ if __name__ == "__main__":
     load_data_to_duckdb("standings", standings, "raw")
     load_data_to_duckdb("teamstats", teamstats, "raw")
     load_data_to_duckdb("playerstats", playerstats, "raw")
+    load_data_to_duckdb("lineups", lineups, "raw")
+    load_data_to_duckdb("lineup_events", lineup_events, "raw")
+    load_data_to_duckdb("match_facts", match_facts, "raw")
+    load_data_to_duckdb("match_officials", match_officials, "raw")
+    load_data_to_duckdb("feed_events", feed_events, "raw")
 
     counts = {
         name: read_data_from_duckdb(f"SELECT count(*) FROM raw.{name}")[0][0]  # noqa: S608
@@ -110,6 +236,11 @@ if __name__ == "__main__":
             "standings",
             "teamstats",
             "playerstats",
+            "lineups",
+            "lineup_events",
+            "match_facts",
+            "match_officials",
+            "feed_events",
         )
     }
     print(f"contract: {counts['matches']} valid, 0 rejected")

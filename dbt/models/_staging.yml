@@ -41,3 +41,37 @@ models:
           - unique
           - not_null
 
+  - name: stg_lineups
+    columns:
+      - name: lineup_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_lineup_events
+    columns:
+      - name: lineup_event_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_feed_events
+    columns:
+      - name: feed_event_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_match_officials
+    columns:
+      - name: official_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_match_facts
+    columns:
+      - name: match_id
+        data_tests:
+          - unique
+          - not_null

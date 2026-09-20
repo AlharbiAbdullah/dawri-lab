@@ -43,3 +43,21 @@ models:
               - goals_against
               - goal_difference
               - points
+
+  - name: fct_goals
+    columns:
+      - name: goal_key
+        data_tests:
+          - unique
+          - not_null
+
+  - name: mart_goal_source_diff
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_equal:
+          arguments:
+            value: 17
+    columns:
+      - name: match_id
+        data_tests:
+          - unique
+          - not_null

@@ -7,5 +7,9 @@ sources:
       - name: standings
       - name: teams 
       - name: teamstats 
-      - name: playerstats 
-
+      - name: playerstats
+      - name: lineups
+      - name: lineup_events
+      - name: feed_events
+      - name: match_facts
+      - name: match_officials

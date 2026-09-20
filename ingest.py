@@ -49,6 +49,24 @@ def playerstats_path(season_id: str, match_id: str) -> Path:
     return Path(f"{storage_path}/{season_id}/{match_id}.json")
 
 
+# get the path to the lineups for a given season
+def lineups_path(season_id: str, match_id: str) -> Path:
+    storage_path = "data/lineups"
+    return Path(f"{storage_path}/{season_id}/{match_id}.json")
+
+
+# get the path to the matchfacts for a given season
+def matchfacts_path(season_id: str, match_id: str) -> Path:
+    storage_path = "data/matchfacts"
+    return Path(f"{storage_path}/{season_id}/{match_id}.json")
+
+
+# get the path to the feed for a given season
+def feed_path(season_id: str, match_id: str) -> Path:
+    storage_path = "data/feed"
+    return Path(f"{storage_path}/{season_id}/{match_id}.json")
+
+
 # fetch matches for a given season
 def fetch_matches(season_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
@@ -105,6 +123,45 @@ def fetch_playerstats(season_id: str, match_id: str) -> bytes:
     return response.content
 
 
+# fetch lineups for a given match
+def fetch_lineups(season_id: str, match_id: str) -> bytes:
+    encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
+    encoded_match_id = quote(match_id, safe="")
+    url = (
+        f"{BASE}/seasons/{encoded_season_id}"
+        f"/matches/{encoded_match_id}/lineups?locale=en-GB"
+    )
+    response = httpx.get(url)
+    response.raise_for_status()
+    return response.content
+
+
+# fetch matchfacts for a given match
+def fetch_matchfacts(season_id: str, match_id: str) -> bytes:
+    encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
+    encoded_match_id = quote(match_id, safe="")
+    url = (
+        f"{BASE}/seasons/{encoded_season_id}"
+        f"/match/{encoded_match_id}/matchfacts?locale=en-GB"
+    )
+    response = httpx.get(url)
+    response.raise_for_status()
+    return response.content
+
+
+# fetch the event feed for a given match
+def fetch_feed(season_id: str, match_id: str) -> bytes:
+    encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
+    encoded_match_id = quote(match_id, safe="")
+    url = (
+        f"{BASE}/seasons/{encoded_season_id}"
+        f"/matches/{encoded_match_id}/feed?locale=en-GB"
+    )
+    response = httpx.get(url)
+    response.raise_for_status()
+    return response.content
+
+
 # write the matches to a file
 def write_matches(matches: bytes, season_id: str) -> None:
     path = matches_path(season_id)
@@ -145,6 +202,27 @@ def write_playerstats(playerstats: bytes, season_id: str, match_id: str) -> None
     path = playerstats_path(season_id=season_id, match_id=match_id)
     ensure_dir(path.parent)
     path.write_bytes(playerstats)
+
+
+# write the lineups to a file
+def write_lineups(lineups: bytes, season_id: str, match_id: str) -> None:
+    path = lineups_path(season_id=season_id, match_id=match_id)
+    ensure_dir(path.parent)
+    path.write_bytes(lineups)
+
+
+# write the matchfacts to a file
+def write_matchfacts(matchfacts: bytes, season_id: str, match_id: str) -> None:
+    path = matchfacts_path(season_id=season_id, match_id=match_id)
+    ensure_dir(path.parent)
+    path.write_bytes(matchfacts)
+
+
+# write the feed to a file
+def write_feed(feed: bytes, season_id: str, match_id: str) -> None:
+    path = feed_path(season_id=season_id, match_id=match_id)
+    ensure_dir(path.parent)
+    path.write_bytes(feed)
 
 
 def count_stat_files(directory: Path, payload_key: str) -> int:
@@ -252,6 +330,53 @@ def main() -> None:
                 ).read_bytes()
             )
 
+    # fetch the lineups and load it into a file
+    for match in matches_json["matches"]:
+        match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
+        if not lineups_path(season_id=season_id, match_id=match_id_cleaned).exists():
+            lineups = fetch_lineups(season_id=season_id, match_id=match["matchId"])
+            request_count += 1
+            lineups_json = json.loads(lineups)
+            if lineups_json.get("home") is not None:
+                write_lineups(
+                    lineups=lineups,
+                    season_id=season_id,
+                    match_id=match_id_cleaned,
+                )
+            time.sleep(0.25)
+
+    # fetch the matchfacts and load it into a file
+    for match in matches_json["matches"]:
+        match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
+        if not matchfacts_path(season_id=season_id, match_id=match_id_cleaned).exists():
+            matchfacts = fetch_matchfacts(
+                season_id=season_id, match_id=match["matchId"]
+            )
+            request_count += 1
+            matchfacts_json = json.loads(matchfacts)
+            if matchfacts_json.get("referees") is not None:
+                write_matchfacts(
+                    matchfacts=matchfacts,
+                    season_id=season_id,
+                    match_id=match_id_cleaned,
+                )
+            time.sleep(0.25)
+
+    # fetch the event feed and load it into a file
+    for match in matches_json["matches"]:
+        match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
+        if not feed_path(season_id=season_id, match_id=match_id_cleaned).exists():
+            feed = fetch_feed(season_id=season_id, match_id=match["matchId"])
+            request_count += 1
+            feed_json = json.loads(feed)
+            if feed_json.get("events") is not None:
+                write_feed(
+                    feed=feed,
+                    season_id=season_id,
+                    match_id=match_id_cleaned,
+                )
+            time.sleep(0.25)
+
     landed_matches = json.loads(matches_path(season_id=season_id).read_bytes())[
         "matches"
     ]
@@ -260,6 +385,9 @@ def main() -> None:
     print(f"distinct: {len({match['matchId'] for match in landed_matches})}")
     print(f"teamstats: {count_stat_files(Path('data/teamstats'), 'stats')}")
     print(f"playerstats: {count_stat_files(Path('data/playerstats'), 'players')}")
+    print(f"lineups: {count_stat_files(Path('data/lineups'), 'home')}")
+    print(f"matchfacts: {count_stat_files(Path('data/matchfacts'), 'referees')}")
+    print(f"feed: {count_stat_files(Path('data/feed'), 'events')}")
 
 
 if __name__ == "__main__":
