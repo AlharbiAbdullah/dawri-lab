@@ -24,15 +24,15 @@ models:
     data_tests:
       - dbt_expectations.expect_table_row_count_to_equal:
           arguments:
-            value: 54
+            value: 108
 
       - dbt_utils.equality:
           arguments:
             compare_model: ref('stg_standings')
             compare_columns:
               - standing_key
+              - season_id
               - type
-              - rank
               - team_id
               - team_name
               - played

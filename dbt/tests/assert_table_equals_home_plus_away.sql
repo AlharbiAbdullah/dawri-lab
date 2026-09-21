@@ -16,8 +16,8 @@ select
     t.goals_against, h.goals_against + a.goals_against as ha_goals_against,
     t.points, h.points + a.points as ha_points
 from t
-join h on h.team_id = t.team_id
-join a on a.team_id = t.team_id
+join h on h.team_id = t.team_id and h.season_id = t.season_id
+join a on a.team_id = t.team_id and a.season_id = t.season_id
 where t.played        <> h.played        + a.played
    or t.won           <> h.won           + a.won
    or t.drawn         <> h.drawn         + a.drawn

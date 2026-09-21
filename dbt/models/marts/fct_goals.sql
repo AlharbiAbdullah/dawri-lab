@@ -4,6 +4,7 @@
 -- the two are different, so the credited team comes from the match, not the slot.
 select
     e.feed_event_key as goal_key,
+    e.season_id,
     e.match_id,
     e.event_id,
     e.side as scoring_side,
@@ -17,5 +18,7 @@ select
     e.home_score_after,
     e.away_score_after
 from {{ ref('stg_feed_events') }} e
-join {{ ref('stg_matches') }} m on m.match_id = e.match_id
+join {{ ref('stg_matches') }} m
+    on m.match_id = e.match_id
+   and m.season_id = e.season_id
 where e.event_type in ('goal', 'penalty-goal', 'own-goal')

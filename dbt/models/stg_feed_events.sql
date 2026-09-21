@@ -1,5 +1,6 @@
 select
-    {{ dbt_utils.generate_surrogate_key(['match_id', 'event_id']) }} as feed_event_key,
+    {{ dbt_utils.generate_surrogate_key(['season_id', 'match_id', 'event_id']) }} as feed_event_key,
+    season_id::varchar as season_id,
     match_id::varchar as match_id,
     event_id::varchar as event_id,
     type::varchar as event_type,

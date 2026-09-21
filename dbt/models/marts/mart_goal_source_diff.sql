@@ -3,6 +3,7 @@
 -- row, and an own goal counts for the other side.
 with lineup_goals as (
     select
+        e.season_id,
         e.match_id,
         case
             when e.event_type = 'own-goal' and l.side = 'home' then 'away'
@@ -11,30 +12,34 @@ with lineup_goals as (
         end as scoring_side
     from {{ ref('stg_lineup_events') }} e
     join {{ ref('stg_lineups') }} l
-        on l.match_id = e.match_id
+        on l.season_id = e.season_id
+       and l.match_id = e.match_id
        and l.player_id = e.player_id
     where e.event_type in ('goal', 'penalty-goal', 'own-goal')
 ),
 
 lineup_counts as (
     select
+        season_id,
         match_id,
         count(*) filter (scoring_side = 'home') as home_goals,
         count(*) filter (scoring_side = 'away') as away_goals
     from lineup_goals
-    group by match_id
+    group by season_id, match_id
 ),
 
 feed_counts as (
     select
+        season_id,
         match_id,
         count(*) filter (scoring_side = 'home') as home_goals,
         count(*) filter (scoring_side = 'away') as away_goals
     from {{ ref('fct_goals') }}
-    group by match_id
+    group by season_id, match_id
 )
 
 select
+    m.season_id,
     m.match_id,
     coalesce(l.home_goals, 0)::integer as lineup_home_goals,
     coalesce(l.away_goals, 0)::integer as lineup_away_goals,
@@ -43,7 +48,15 @@ select
     m.home_score::integer as home_score,
     m.away_score::integer as away_score
 from {{ ref('stg_matches') }} m
-left join lineup_counts l on l.match_id = m.match_id
-left join feed_counts f on f.match_id = m.match_id
-where coalesce(l.home_goals, 0) <> m.home_score
-   or coalesce(l.away_goals, 0) <> m.away_score
+left join lineup_counts l
+    on l.season_id = m.season_id
+   and l.match_id = m.match_id
+left join feed_counts f
+    on f.season_id = m.season_id
+   and f.match_id = m.match_id
+where m.home_score is not null
+  and m.away_score is not null
+  and (
+       coalesce(l.home_goals, 0) <> m.home_score
+    or coalesce(l.away_goals, 0) <> m.away_score
+  )

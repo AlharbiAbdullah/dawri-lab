@@ -1,17 +1,18 @@
 with cte as (
-
-        select
-            {{ dbt_utils.generate_surrogate_key(['type', 'team_id']) }} as standing_key,
-            type, 
-            team_id, 
-            short_name as team_name, 
-            unnest(stats) as stats
-        from 
-            {{ source('raw', 'standings') }}
+    select
+        {{ dbt_utils.generate_surrogate_key(['season_id', 'type', 'team_id']) }} as standing_key,
+        season_id,
+        type,
+        team_id,
+        short_name as team_name,
+        unnest(stats) as stats
+    from
+        {{ source('raw', 'standings') }}
 )
 
 select
     standing_key,
+    season_id,
     type,
     team_id,
     team_name,
@@ -27,4 +28,4 @@ select
     max(case when stats.statsid = 'movement'        then trim(stats.statsvalue, '"') end)::varchar as movement,
     max(case when stats.statsid = 'form'            then stats.statsvalue end)::varchar as form
 from cte
-group by 1, 2, 3, 4
+group by 1, 2, 3, 4, 5

@@ -1,4 +1,5 @@
 select
+    season_id::varchar as season_id,
     match_id::varchar as match_id,
     stadium_id::varchar as stadium_id,
     stadium_name::varchar as stadium_name,

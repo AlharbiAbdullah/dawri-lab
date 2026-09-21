@@ -1,5 +1,6 @@
 select
-    {{ dbt_utils.generate_surrogate_key(['match_id', 'player_id']) }} as lineup_key,
+    {{ dbt_utils.generate_surrogate_key(['season_id', 'match_id', 'player_id']) }} as lineup_key,
+    season_id::varchar as season_id,
     match_id::varchar as match_id,
     team_id::varchar as team_id,
     side::varchar as side,

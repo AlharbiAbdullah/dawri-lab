@@ -1,5 +1,6 @@
 select
-    {{ dbt_utils.generate_surrogate_key(['match_id', 'player_id', 'stats_id']) }} as player_stat_key,
+    {{ dbt_utils.generate_surrogate_key(['season_id', 'match_id', 'player_id', 'stats_id']) }} as player_stat_key,
+    season_id,
     match_id,
     player_id,
     team_id,
@@ -10,7 +11,7 @@ select
 from
     {{ source('raw', 'playerstats') }}
 qualify row_number() over (
-    partition by match_id, player_id, stats_id
+    partition by season_id, match_id, player_id, stats_id
     order by
         case
             when stats_label is null then 2                      -- no label loses

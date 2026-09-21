@@ -6,6 +6,7 @@ with matches as (
 
 team_matches as (
     select
+        season_id,
         home_team_id as team_id,
         away_team_id as opponent_id,
         'home'       as venue,
@@ -16,6 +17,7 @@ team_matches as (
     union all
 
     select
+        season_id,
         away_team_id as team_id,
         home_team_id as opponent_id,
         'away'       as venue,
@@ -25,13 +27,14 @@ team_matches as (
 ),
 
 blocks as (
-    select team_id, venue as type, goals_for, goals_against from team_matches
+    select season_id, team_id, venue as type, goals_for, goals_against from team_matches
     union all
-    select team_id, 'table' as type, goals_for, goals_against from team_matches
+    select season_id, team_id, 'table' as type, goals_for, goals_against from team_matches
 ),
 
 aggregated as (
     select
+        season_id,
         type,
         team_id,
         count(*)                                          as played,
@@ -41,11 +44,12 @@ aggregated as (
         sum(goals_for)                                    as goals_for,
         sum(goals_against)                                as goals_against
     from blocks
-    group by type, team_id
+    group by season_id, type, team_id
 ),
 
 scored as (
     select
+        a.season_id,
         a.type,
         a.team_id,
         t.short_name                  as team_name,
@@ -58,13 +62,14 @@ scored as (
         a.goals_for - a.goals_against as goal_difference,
         3 * a.won + a.drawn           as points
     from aggregated a
-    join {{ ref('stg_teams') }} t on t.team_id = a.team_id
+    join {{ ref('stg_teams') }} t
+        on t.team_id = a.team_id
+       and t.season_id = a.season_id
 ),
 
--- rule 2 and 3: all meetings between the tied teams, home and away,
--- whatever the block. tie groups are per block, since points differ per block.
 head_to_head as (
     select
+        s.season_id,
         s.type,
         s.team_id,
         sum(case
@@ -74,12 +79,15 @@ head_to_head as (
             end)                             as h2h_points,
         sum(tm.goals_for - tm.goals_against) as h2h_goal_difference
     from scored s
-    join team_matches tm on tm.team_id = s.team_id
+    join team_matches tm
+        on tm.team_id = s.team_id
+       and tm.season_id = s.season_id
     join scored o
-        on o.type    = s.type
+        on o.season_id = s.season_id
+       and o.type    = s.type
        and o.team_id = tm.opponent_id
        and o.points  = s.points
-    group by s.type, s.team_id
+    group by s.season_id, s.type, s.team_id
 ),
 
 ranked as (
@@ -89,14 +97,17 @@ ranked as (
         coalesce(h.h2h_goal_difference, 0) as h2h_goal_difference
     from scored s
     left join head_to_head h
-        on h.type = s.type and h.team_id = s.team_id
+        on h.season_id = s.season_id
+       and h.type = s.type
+       and h.team_id = s.team_id
 )
 
 select
-    {{ dbt_utils.generate_surrogate_key(['type', 'team_id']) }} as standing_key,
+    {{ dbt_utils.generate_surrogate_key(['season_id', 'type', 'team_id']) }} as standing_key,
+    season_id,
     type,
     cast(row_number() over (
-        partition by type
+        partition by season_id, type
         order by
             points              desc,
             h2h_points          desc,

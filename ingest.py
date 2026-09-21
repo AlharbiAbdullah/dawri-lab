@@ -1,11 +1,19 @@
+import argparse
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import quote
 
 import httpx
 
 BASE = "https://api-sdp.spl.com.sa/v1/spl/football"
+REQUEST_GAP = 0.25
+SEASONS = {
+    "2025/2026": "0de9cda0d297418699a8357a8825d46c",
+    "2026/2027": "3677a75aaa514e43b2840e7fa367c91d",
+}
+LIVE_SEASON = "2026/2027"
 
 
 # ensure the directory exists
@@ -107,7 +115,10 @@ def fetch_standings(season_id: str) -> bytes:
 def fetch_teamstats(season_id: str, match_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
     encoded_match_id = quote(match_id, safe="")
-    url = f"{BASE}/seasons/{encoded_season_id}/match/{encoded_match_id}/teamstats?locale=en-GB"
+    url = (
+        f"{BASE}/seasons/{encoded_season_id}"
+        f"/match/{encoded_match_id}/teamstats?locale=en-GB"
+    )
     response = httpx.get(url)
     response.raise_for_status()
     return response.content
@@ -117,7 +128,10 @@ def fetch_teamstats(season_id: str, match_id: str) -> bytes:
 def fetch_playerstats(season_id: str, match_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
     encoded_match_id = quote(match_id, safe="")
-    url = f"{BASE}/seasons/{encoded_season_id}/match/{encoded_match_id}/playerstats?locale=en-GB"
+    url = (
+        f"{BASE}/seasons/{encoded_season_id}"
+        f"/match/{encoded_match_id}/playerstats?locale=en-GB"
+    )
     response = httpx.get(url)
     response.raise_for_status()
     return response.content
@@ -234,148 +248,155 @@ def count_stat_files(directory: Path, payload_key: str) -> int:
     return count
 
 
-# main function to ingest the matches
+def parse_season() -> tuple[str, str]:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("season", choices=SEASONS)
+    args = parser.parse_args()
+    return args.season, SEASONS[args.season]
+
+
+def cleaned_match_id(match: dict) -> str:
+    return match["matchId"].replace("spl::Football_Match::", "")
+
+
+def has_teamstats_data(payload: dict) -> bool:
+    return payload.get("stats") is not None
+
+
+def has_playerstats_data(payload: dict) -> bool:
+    return payload.get("players") is not None
+
+
+def has_lineups_data(payload: dict) -> bool:
+    home = payload.get("home") or {}
+    away = payload.get("away") or {}
+    return bool(home.get("fielded") or away.get("fielded"))
+
+
+def has_matchfacts_data(payload: dict) -> bool:
+    return bool(payload.get("referees"))
+
+
+def has_feed_data(payload: dict) -> bool:
+    return bool(payload.get("events"))
+
+
+def land_season_file(
+    path: Path,
+    fetch: Callable[[str], bytes],
+    write: Callable[[bytes, str], None],
+    season_id: str,
+    refresh: bool,
+) -> tuple[dict, int]:
+    if refresh or not path.exists():
+        body = fetch(season_id)
+        write(body, season_id)
+        time.sleep(REQUEST_GAP)
+        return json.loads(body), 1
+    return json.loads(path.read_bytes()), 0
+
+
+def land_match_family(
+    matches: list[dict],
+    season_id: str,
+    dest: Callable[[str, str], Path],
+    fetch: Callable[[str, str], bytes],
+    write: Callable[[bytes, str, str], None],
+    has_data: Callable[[dict], bool],
+) -> int:
+    requests = 0
+    for match in matches:
+        if match.get("status") != "FINISHED":
+            continue
+        match_id = cleaned_match_id(match)
+        if dest(season_id, match_id).exists():
+            continue
+        body = fetch(season_id, match["matchId"])
+        requests += 1
+        if has_data(json.loads(body)):
+            write(body, season_id, match_id)
+        time.sleep(REQUEST_GAP)
+    return requests
+
+
 def main() -> None:
-    seasons = {
-        "2025/2026": "0de9cda0d297418699a8357a8825d46c",
-    }
-    # select the first season
-    season_text, season_id = next(iter(seasons.items()))
+    season_text, season_id = parse_season()
+    refresh_season_level = season_text == LIVE_SEASON
     request_count = 0
-    # fetch the matches and load it into a file
-    if not matches_path(season_id=season_id).exists():
-        matches = fetch_matches(season_id=season_id)
-        request_count += 1
-        write_matches(matches=matches, season_id=season_id)
-        matches_json = json.loads(matches)
-        print(f"landed {len(matches_json['matches'])} matches for {season_text}")
-    else:
-        matches_json = json.loads(matches_path(season_id=season_id).read_bytes())
 
-    # fetch the matchdays and load it into a file
-    if not matchdays_path(season_id=season_id).exists():
-        matchdays = fetch_matchday(season_id=season_id)
-        request_count += 1
-        write_matchdays(matchdays=matchdays, season_id=season_id)
-        matchdays_json = json.loads(matchdays)
-        print(f"landed {len(matchdays_json['matchdays'])} matchdays for {season_text}")
-    else:
-        matchdays_json = json.loads(matchdays_path(season_id=season_id).read_bytes())
+    matches_json, n = land_season_file(
+        matches_path(season_id),
+        fetch_matches,
+        write_matches,
+        season_id,
+        refresh_season_level,
+    )
+    request_count += n
+    _, n = land_season_file(
+        matchdays_path(season_id),
+        fetch_matchday,
+        write_matchdays,
+        season_id,
+        refresh_season_level,
+    )
+    request_count += n
+    _, n = land_season_file(
+        teams_path(season_id),
+        fetch_teams,
+        write_teams,
+        season_id,
+        refresh_season_level,
+    )
+    request_count += n
+    _, n = land_season_file(
+        standings_path(season_id),
+        fetch_standings,
+        write_standings,
+        season_id,
+        refresh_season_level,
+    )
+    request_count += n
 
-    # fetch the teams and load it into a file
-    if not teams_path(season_id=season_id).exists():
-        teams = fetch_teams(season_id=season_id)
-        request_count += 1
-        write_teams(teams=teams, season_id=season_id)
-        teams_json = json.loads(teams)
-        print(f"landed {len(teams_json['teams'])} teams for {season_text}")
-    else:
-        teams_json = json.loads(teams_path(season_id=season_id).read_bytes())
-
-    # fetch the standings and load it into a file
-    if not standings_path(season_id=season_id).exists():
-        standings = fetch_standings(season_id=season_id)
-        request_count += 1
-        write_standings(standings=standings, season_id=season_id)
-        standings_json = json.loads(standings)
-        print(f"landed {len(standings_json['standings'])} standings for {season_text}")
-    else:
-        standings_json = json.loads(standings_path(season_id=season_id).read_bytes())
-
-    # fetch the teamstats and load it into a file
-    for match in matches_json["matches"]:
-        match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
-        if not teamstats_path(season_id=season_id, match_id=match_id_cleaned).exists():
-            teamstats = fetch_teamstats(season_id=season_id, match_id=match["matchId"])
-            request_count += 1
-            teamstats_json = json.loads(teamstats)
-            if teamstats_json.get("stats") is not None:
-                write_teamstats(
-                    teamstats=teamstats,
-                    season_id=season_id,
-                    match_id=match_id_cleaned,
-                )
-                print(f"landed {len(teamstats_json)} teamstats for {season_text}")
-            time.sleep(0.5)
-        else:
-            teamstats_json = json.loads(
-                teamstats_path(
-                    season_id=season_id, match_id=match_id_cleaned
-                ).read_bytes()
-            )
-
-    # fetch the playerstats and load it into a file
-    for match in matches_json["matches"]:
-        match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
-        if not playerstats_path(
-            season_id=season_id, match_id=match_id_cleaned
-        ).exists():
-            playerstats = fetch_playerstats(
-                season_id=season_id, match_id=match["matchId"]
-            )
-            request_count += 1
-            playerstats_json = json.loads(playerstats)
-            if playerstats_json.get("players") is not None:
-                write_playerstats(
-                    playerstats=playerstats,
-                    season_id=season_id,
-                    match_id=match_id_cleaned,
-                )
-                print(f"landed {len(playerstats_json)} playerstats for {season_text}")
-            time.sleep(0.5)
-        else:
-            playerstats_json = json.loads(
-                playerstats_path(
-                    season_id=season_id, match_id=match_id_cleaned
-                ).read_bytes()
-            )
-
-    # fetch the lineups and load it into a file
-    for match in matches_json["matches"]:
-        match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
-        if not lineups_path(season_id=season_id, match_id=match_id_cleaned).exists():
-            lineups = fetch_lineups(season_id=season_id, match_id=match["matchId"])
-            request_count += 1
-            lineups_json = json.loads(lineups)
-            if lineups_json.get("home") is not None:
-                write_lineups(
-                    lineups=lineups,
-                    season_id=season_id,
-                    match_id=match_id_cleaned,
-                )
-            time.sleep(0.25)
-
-    # fetch the matchfacts and load it into a file
-    for match in matches_json["matches"]:
-        match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
-        if not matchfacts_path(season_id=season_id, match_id=match_id_cleaned).exists():
-            matchfacts = fetch_matchfacts(
-                season_id=season_id, match_id=match["matchId"]
-            )
-            request_count += 1
-            matchfacts_json = json.loads(matchfacts)
-            if matchfacts_json.get("referees") is not None:
-                write_matchfacts(
-                    matchfacts=matchfacts,
-                    season_id=season_id,
-                    match_id=match_id_cleaned,
-                )
-            time.sleep(0.25)
-
-    # fetch the event feed and load it into a file
-    for match in matches_json["matches"]:
-        match_id_cleaned = match["matchId"].replace("spl::Football_Match::", "")
-        if not feed_path(season_id=season_id, match_id=match_id_cleaned).exists():
-            feed = fetch_feed(season_id=season_id, match_id=match["matchId"])
-            request_count += 1
-            feed_json = json.loads(feed)
-            if feed_json.get("events") is not None:
-                write_feed(
-                    feed=feed,
-                    season_id=season_id,
-                    match_id=match_id_cleaned,
-                )
-            time.sleep(0.25)
+    request_count += land_match_family(
+        matches_json["matches"],
+        season_id,
+        teamstats_path,
+        fetch_teamstats,
+        write_teamstats,
+        has_teamstats_data,
+    )
+    request_count += land_match_family(
+        matches_json["matches"],
+        season_id,
+        playerstats_path,
+        fetch_playerstats,
+        write_playerstats,
+        has_playerstats_data,
+    )
+    request_count += land_match_family(
+        matches_json["matches"],
+        season_id,
+        lineups_path,
+        fetch_lineups,
+        write_lineups,
+        has_lineups_data,
+    )
+    request_count += land_match_family(
+        matches_json["matches"],
+        season_id,
+        matchfacts_path,
+        fetch_matchfacts,
+        write_matchfacts,
+        has_matchfacts_data,
+    )
+    request_count += land_match_family(
+        matches_json["matches"],
+        season_id,
+        feed_path,
+        fetch_feed,
+        write_feed,
+        has_feed_data,
+    )
 
     landed_matches = json.loads(matches_path(season_id=season_id).read_bytes())[
         "matches"
