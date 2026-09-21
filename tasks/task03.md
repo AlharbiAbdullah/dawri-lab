@@ -1,15 +1,172 @@
-# Lesson 3 build task: raw JSON into DuckDB
+# L3: raw JSON into DuckDB
 
-Lesson 1 landed the season as raw files. Lesson 2 put a contract on
-the matches file. This lesson turns the landed files into tables in
-one DuckDB database, so lesson 4's dbt models have something to
-query. The raw files stay exactly as landed; the database is built
-from them and can be thrown away and rebuilt at any time.
+## The concept
+
+### The problem
+
+Lesson 1 landed the season as 616 raw files. Lesson 2 put a contract
+on the matches file. Lesson 4's dbt models need tables to query, and
+files are not tables:
+
+1. **You cannot ask a folder a question.** "How many goals did Al
+   Hilal score at home" means opening 306 files in Python. SQL needs
+   rows.
+2. **The JSON is not row shaped.** Every file is an envelope around a
+   list. Stats rows carry no match id, the envelope does. One
+   standings `statsValue` is an int in one row, a string in another,
+   a list in a third and null in a fourth.
+3. **A load that rebuilds everything is wasteful.** 250 MB read and
+   1.4 million rows written to change nothing (hard tier).
+
+### What we want
+
+Six raw tables in one DuckDB file, `data/dawri.duckdb`, built from
+the landed files. The raw files stay exactly as landed. The database
+can be thrown away and rebuilt at any time.
+
+### What you will understand at the end
+
+| Idea | In one line |
+|---|---|
+| Files are truth, the database is derived | Delete the `.duckdb` file and nothing is lost. |
+| Envelope to rows | One file becomes many rows, and each row must carry the ids its envelope held. |
+| Column types are decisions | What stays nested, what becomes a column, and what type holds a value that is not one type. |
+| Rerunnable load | A second run gives the same tables, not doubled ones. |
+| Per-file load (hard) | A load can remember what it has seen and skip it. |
+
+Easy loads one table. Mid loads all six behind the contract. Hard
+makes the load per file.
+
+### Before and after
+
+```
+BEFORE                              AFTER
+616 JSON files under data/          6 tables in data/dawri.duckdb
+questions answered by Python loops  questions answered by SQL
+contract runs on its own            contract gates the load
+```
+
+Guardrails for every tier:
+
+- Read only from `data/`. Zero network requests from `load.py`. The hard tier's single request is made by `ingest.py`, unchanged.
+- The raw files are never modified. `ingest.py` and `contracts.py` are never modified.
+- The database is one file, `data/dawri.duckdb`, gitignored with the rest of `data/`.
+- Column names are snake_case. JSON keys stay as the source sent them, the rename happens at load.
+- Stat values land as numbers, not text. The long shape is kept as landed: no pivot at load (decided in `docs/api-model.md`, the pivot is lesson 4's job).
+- Every count printed comes from a query against the database, not from the objects you loaded.
+- Code goes in `load.py` at the repo root. You add `duckdb` (Python package only, no CLI). pyarrow, pandas, polars are allowed: add what you use, know why. `pydantic` comes in through `contracts.py`.
+- Gates: `uv run ruff check`, `uv run ty check`, then `uv run load.py`.
+
+---
+
+## Easy: one table
+
+**Target output**
+
+```
+matches: 306
+```
+
+**Spec**
+
+1. Add `duckdb` to the project. Load the landed matches file into a
+   table called `matches` in `data/dawri.duckdb`, one row per match.
+2. Print the line above, from a query against the table, not from a
+   Python `len`.
+3. In chat: run `DESCRIBE matches`. `matchDateUtc` comes out of the
+   source as `"2025-08-28T16:05:00Z"`. Lesson 2 rejected that same
+   string without its `Z`. Look at the type your `matches` table
+   gives that column and the value it holds. Did the `Z` survive the
+   load? If not, where does "this is UTC" live now, and what does
+   that mean for the tables lesson 4 builds on top?
+
+**Withheld:** how one file wrapped in an envelope becomes one row per
+match, and whether `home`, `away` and `matchSet` stay nested objects
+or become columns. Also which of the 36 keys become columns at all.
+The raw file is still on disk, so a column you left out is one reload
+away. That decision is the lesson.
+
+---
+
+## Mid: six tables, behind the contract
+
+**Target output**
+
+```
+contract: 306 valid, 0 rejected
+matches: 306
+matchdays: 34
+teams: 18
+standings: 54
+teamstats: 76648
+playerstats: 1387916
+```
+
+Run twice: the second run prints exactly the same seven lines.
+
+**Spec**
+
+4. Before anything is written, run the lesson 2 contract over the 306
+   matches. Import it from `contracts.py`, do not copy it. If any
+   match is rejected the run stops before writing a row and says
+   which.
+5. Load the rest. One table per file family, six tables in all:
+
+   - `matchdays`, one row per matchday
+   - `teams`, one row per team
+   - `standings`, one row per team per block, so the row knows
+     whether it is `table`, `home` or `away`
+   - `teamstats`, one row per stat per match, as landed
+   - `playerstats`, one row per stat per player per match, as landed
+
+   Every stats row must carry the id of the match it came from.
+6. Print the seven lines above, every number from a query against the
+   database.
+7. Run it twice. Same seven lines.
+
+**Withheld:** where a stats row gets its match id from, since the row
+itself has none. What a rerun does to a table that already exists.
+What column type holds a standings `statsValue` that is `1` in one
+row, `"stable"` in another, a list in a third and `None` in a fourth.
+And which columns each table declares.
+
+---
+
+## Hard (optional): load per file
+
+The mid tier rebuilds everything on every run. That is 250 MB read
+and 1.4 million rows written to change nothing.
+
+**Target output**
+
+Three runs back to back, `loaded:` printed before the seven counts:
+
+```
+run 1                                  loaded: 616 files
+run 2                                  loaded: 0 files, same seven counts
+delete one playerstats file,
+uv run ingest.py (requests: 1),
+then the load                          loaded: 1 file, same seven counts
+```
+
+After the third run that match's stat rows appear exactly once.
+
+**Spec**
+
+8. Make the load per file. A file that has not changed since it was
+   last loaded is not read again. A file that has changed is reloaded
+   and its old rows are gone.
+
+**Withheld:** what the load remembers about a file to know it has
+changed, and where it remembers it. Recall from lesson 1 that two
+pulls of the same match are never the same bytes.
+
+---
+
+## Reference
 
 DuckDB can read JSON files by itself (`read_json`), and it can also
 take rows you hand it from Python. Both are open to you.
-
-## Input
 
 Everything under `data/`, 616 files, landed by lesson 1:
 
@@ -90,120 +247,3 @@ number.
  "matchId": "spl::Football_Match::ca8c6f7ba4b74c93813a2a393c52e9ad",
  "home": {...}, "away": {...}, "apiCallRequestTime": "..."}
 ```
-
-## Easy tier (start here)
-
-1. Add `duckdb` to the project. Load the landed matches file into a
-   table called `matches` in `data/dawri.duckdb`, one row per match.
-2. Print one line, from a query against the table, not from a
-   Python `len`:
-
-```
-matches: 306
-```
-
-3. Run `DESCRIBE matches` and answer here, in words: `matchDateUtc`
-   comes out of the source as `"2025-08-28T16:05:00Z"`. Lesson 2
-   rejected that same string without its `Z`. Look at the type your
-   `matches` table gives that column and the value it holds. Did the
-   `Z` survive the load? If not, where does "this is UTC" live now,
-   and what does that mean for the tables lesson 4 builds on top?
-
-**Withheld:** how one file wrapped in an envelope becomes one row
-per match, and whether `home`, `away` and `matchSet` stay nested
-objects or become columns. Also which of the 36 keys become columns
-at all. The raw file is still on disk; a column you left out is one
-reload away. That decision is the lesson.
-
-## Mid tier (builds on easy)
-
-4. Before anything is written, run the lesson 2 contract over the
-   306 matches. Import it from `contracts.py`; do not copy it. If
-   any match is rejected the run stops before writing a row and says
-   which.
-5. Load the rest. One table per file family, six tables in all:
-
-   - `matchdays`, one row per matchday
-   - `teams`, one row per team
-   - `standings`, one row per team per block, so the row knows
-     whether it is `table`, `home` or `away`
-   - `teamstats`, one row per stat per match, as landed
-   - `playerstats`, one row per stat per player per match, as landed
-
-   Every stats row must carry the id of the match it came from.
-6. Print, every number from a query against the database:
-
-```
-contract: 306 valid, 0 rejected
-matches: 306
-matchdays: 34
-teams: 18
-standings: 54
-teamstats: 76648
-playerstats: 1387916
-```
-
-7. Run it twice. The second run prints exactly the same seven lines.
-
-**Withheld:** where a stats row gets its match id from, since the
-row itself has none. What a rerun does to a table that already
-exists. What column type holds a standings `statsValue` that is `1`
-in one row, `"stable"` in another, a list in a third and `None` in
-a fourth. And which columns each table declares.
-
-## Hard tier (optional)
-
-The mid tier rebuilds everything on every run. That is 250 MB read
-and 1.4 million rows written to change nothing.
-
-8. Make the load per file. A file that has not changed since it was
-   last loaded is not read again. A file that has changed is
-   reloaded and its old rows are gone. Print, before the seven count
-   lines:
-
-```
-loaded: 616 files
-```
-
-Pass condition, three runs back to back:
-
-   - first run: `loaded: 616 files`
-   - second run: `loaded: 0 files`, same seven counts
-   - delete one playerstats file, run `uv run ingest.py` (lesson 1's
-     rerun re-lands exactly that file, `requests: 1`), then run the
-     load again: `loaded: 1 file`, same seven counts, and that
-     match's stat rows appear exactly once.
-
-**Withheld:** what the load remembers about a file to know it has
-changed, and where it remembers it. Recall from lesson 1 that two
-pulls of the same match are never the same bytes.
-
-## Constraints
-
-- Read only from `data/`. Zero network requests from `load.py`. The
-  hard tier's single request is made by `ingest.py`, unchanged.
-- The raw files are never modified. `ingest.py` and `contracts.py`
-  are never modified.
-- The database is one file, `data/dawri.duckdb`. It is gitignored
-  with the rest of `data/`.
-- Column names are snake_case, as lesson 2 promised. JSON keys stay
-  as the source sent them; the rename happens at load.
-- Stat values land as numbers, not text. The long shape is kept as
-  landed: no pivot at load. That was decided in
-  `docs/api-model.md` and the pivot is lesson 4's job.
-- Every count printed comes from the database, not from the objects
-  you loaded.
-
-## Rules
-
-- No skeleton on purpose. The design decisions are the lesson.
-- `duckdb` is the real dependency and you add it. The Python package
-  is all you need; no DuckDB CLI. Data libraries are allowed and are
-  your call (pyarrow, pandas, polars): add what you use, know why.
-  `pydantic` comes in through `contracts.py`.
-- Write it in `load.py` at the repo root.
-- Three gates: `uv run ruff check`, `uv run ty check`, then
-  `uv run load.py`.
-- Answer step 3 here in words, not in the file.
-- When it runs and the output matches, tell me and I will review
-  your code.

@@ -1,14 +1,329 @@
-# Lesson 4 build task: dbt I, sources and staging
+# L4: dbt I, sources and staging
+
+## The concept
+
+### The problem
 
 Lesson 3 put six raw tables in `data/dawri.duckdb`, schema `raw`.
-From here on the pipeline is SQL over those tables, and dbt is the
-tool that runs it. This lesson builds the staging layer: one model
-per raw table, renamed and typed, one row per thing, nothing
-computed yet. Marts, the tables that answer questions, are lesson 5.
-The raw tables stay exactly as `load.py` built them; dbt reads them
-and never writes to schema `raw`.
+They are faithful copies of the API, and that is exactly why nobody
+can build on them directly:
 
-## dbt in six lines
+1. **Raw is shaped for the API, not for questions.** Timestamps are
+   text. Team ids sit inside structs. The 12 standings stats sit in a
+   list of JSON strings. Names like `home_score_push` say nothing.
+   Every query on top would repeat the same casts and unpacking, each
+   one slightly differently.
+2. **Nobody has checked the grain.** `raw.playerstats` has 17,183
+   keys that appear twice. Anything that sums over it is wrong until
+   someone decides what one row is.
+3. **SQL files alone have no order.** Once models read other models,
+   something has to know what to build first, and what to test after.
+
+### What we want
+
+A staging layer in dbt: one model per raw table, renamed and typed,
+one row per thing, nothing computed yet. Every model has one key,
+tested unique and not null. `dbt build` builds and tests all of it
+in one command. Marts, the tables that answer questions, are
+lesson 5.
+
+### What you will understand at the end
+
+| Idea | In one line |
+|---|---|
+| What dbt is | A folder of `select` files. `source()` and `ref()` tell dbt the build order, YAML declares the tests. |
+| Staging | Rename, cast, unpack, one row per thing. Clean once so every mart reads the same clean tables. |
+| Grain and key | Every model states what one row is, and a test proves it. |
+| Timestamp types | `TIMESTAMP` and `TIMESTAMPTZ` print the same instant differently. Which one you store is a decision you defend. |
+| View or table | A model either recomputes on every query or sits on disk. The choice is per model. |
+
+Easy stages one model and settles the timestamp question. Mid stages
+the other five and meets the doubled grain. Hard turns JSON list text
+into rows.
+
+### Before and after
+
+```
+BEFORE                                  AFTER
+raw.matches: text dates, structs        stg_matches: typed, flat, 16 columns
+raw.standings: list of JSON strings     stg_standings: 12 typed columns
+raw.playerstats: 17,183 doubled keys    stg_playerstats: one row per key
+no tests                                unique + not_null on every key
+SQL run by hand                         uv run dbt build
+```
+
+Guardrails for every tier:
+
+- Models read the raw tables through `source()` only. No model reads `data/*.json`. Zero network.
+- dbt never writes to schema `raw`. `load.py` owns it and rebuilds it from scratch. Step 8 is the check.
+- `ingest.py`, `contracts.py` and `load.py` are never modified.
+- The database path in the profile is relative to the project, not absolute, and `profiles.yml` lives in the repo, not in `~/.dbt`. The repo runs on the Mac and the Linux box. dbt's `target/`, `logs/` and `dbt_packages/` are gitignored.
+- Column names stay snake_case. Renames are expected where a raw name says nothing (`home_score_push`).
+- `stg_teamstats` and `stg_playerstats` stay long: one row per stat. Lesson 5 picks which ids become columns. Stat values stay numbers.
+- `stg_standings` is wide: the 12 ids are the same on every row, so they are columns.
+- Exactly one `unique` and one `not_null` test per model, on its key. The `Summary:` total is exact because of this rule.
+- Use the tools people use: dbt packages (`dbt_utils`, `dbt_expectations`), macros, dbt's own features. Add a package through `packages.yml`, run `dbt deps`, commit `package-lock.yml`. Know what a macro compiles to (`dbt compile` shows it).
+- You add `dbt`. That is dbt v2, the Fusion engine: a Rust binary with the DuckDB adapter built in. `uv add dbt` on Python 3.14 gives 2.0.4 today. First run downloads the DuckDB driver once, after that it is offline.
+- No Python file this lesson. Gates: `uv run dbt debug`, then `uv run dbt build`.
+
+---
+
+## Easy: one staged model
+
+**Target output**
+
+`uv run dbt build`, last two lines:
+
+```
+Processed: 1 model
+Summary: 1 total | 1 success
+```
+
+`uv run dbt show --inline "select count(*) as n from {{ ref('stg_matches') }}"`:
+
+```
+|   n |
+| --- |
+| 306 |
+```
+
+**Spec**
+
+1. Add `dbt` to the project. Create a dbt project in a folder at the
+   repo root. The folder name is yours, the project `name` is
+   `dawri`. The profile points at `data/dawri.duckdb` and lands
+   models in schema `staging`. `uv run dbt debug` passes.
+2. Declare `raw.matches` as a source. Build `stg_matches`: one row
+   per match, read through `source()`, exactly these 16 output
+   columns, in this order. Left is the raw column, right is what
+   leaves the model. Nothing else leaves, the other 20 raw columns
+   are dropped.
+
+   ```
+   match_id               -> match_id            VARCHAR, unchanged
+   match_date_utc         -> kickoff_utc         a timestamp type, your choice
+   match_date_local       -> kickoff_local       TIMESTAMP
+   local_time_utc_offset  -> utc_offset          VARCHAR, unchanged
+   status                 -> status              VARCHAR, unchanged
+   win_reason             -> win_reason          VARCHAR, unchanged
+   win_team_id            -> win_team_id         VARCHAR, unchanged
+   home_score_push        -> home_score          BIGINT, unchanged
+   away_score_push        -> away_score          BIGINT, unchanged
+   time                   -> minutes_played      INTEGER
+   additional_time        -> additional_minutes  INTEGER
+   home.teamId            -> home_team_id        VARCHAR, pulled out of the struct
+   away.teamId            -> away_team_id        VARCHAR, pulled out of the struct
+   match_set.matchSetId   -> matchday_id         VARCHAR, pulled out of the struct
+   stadium_name           -> stadium_name        VARCHAR, unchanged
+   city_name              -> city_name           VARCHAR, unchanged
+   ```
+
+   The three structs do not leave the model. Team names, logos and
+   matchday names live in `raw.teams` and `raw.matchdays`, the ids
+   above are the join keys to them. The one open choice is the type
+   of `kickoff_utc`: `TIMESTAMP` or `TIMESTAMPTZ`. Step 4 is where
+   you defend it.
+3. Run `uv run dbt build`, then the `dbt show` count. Both match the
+   target output.
+4. In chat: the raw string is `16:05Z`. One cast gives back
+   `16:05:00`, the other `19:05:00+03`. Are those the same instant?
+   Which type did your model choose, and what does the `+03` on the
+   way out depend on, so what would the same query print on a machine
+   set to UTC? Then: if lesson 5 wants "kickoff in Riyadh local
+   time", which of `match_date_utc`, `match_date_local` and
+   `local_time_utc_offset` does it build from, and why not the other
+   two? Say how you checked, not just the answer.
+
+**Withheld:** which timestamp type `kickoff_utc` gets. That decision
+is the lesson, and step 4 is where you make the case for it.
+
+---
+
+## Mid: the other five, and the doubled grain
+
+**Target output**
+
+`uv run dbt build`, last two lines:
+
+```
+Processed: 6 models | 12 tests
+Summary: 18 total | 18 success
+```
+
+`dbt show`, exact results:
+
+```sql
+select count(*) from {{ ref('stg_playerstats') }}     -- 1370733
+select count(*) from {{ ref('stg_teamstats') }}       --   76648
+select count(*) from {{ ref('stg_standings') }}       --      54
+
+select type, team_name, rank, points, goal_difference
+from {{ ref('stg_standings') }}
+where type = 'table' order by rank
+-- table Al Nassr 1 86 63 / table Al Hilal 2 84 58 / table Al Ahli 3 81 46 ...
+
+select type, sum(won) from {{ ref('stg_standings') }} group by 1
+-- table 236 / home 135 / away 101
+```
+
+After `uv run load.py`, a second `uv run dbt build` ends with the same
+two lines.
+
+**Spec**
+
+5. Stage the other five. Same format as step 2: left is the raw
+   column, right is what leaves the model, in this order, nothing
+   else leaves. Every model also has one key column, named below,
+   that is unique per row. Where the grain is two or three raw
+   columns, how you make one key column out of them is withheld.
+
+   `stg_matchdays`, 34 rows, key `matchday_id`:
+
+   ```
+   match_set_id     -> matchday_id   VARCHAR, unchanged
+   name             -> name          VARCHAR, unchanged
+   short_name       -> short_name    VARCHAR, unchanged
+   start_date_utc   -> start_utc     the type you gave kickoff_utc
+   end_date_utc     -> end_utc       the type you gave kickoff_utc
+   matchday_status  -> status        VARCHAR, unchanged
+   ```
+
+   The other 8 raw columns are dropped.
+
+   `stg_teams`, 18 rows, key `team_id`:
+
+   ```
+   team_id           -> team_id           VARCHAR, unchanged
+   short_name        -> short_name        VARCHAR, unchanged
+   official_name     -> official_name     VARCHAR, unchanged
+   acronym_name      -> acronym           VARCHAR, unchanged
+   country_code      -> country_code      VARCHAR, unchanged
+   stadium.name      -> stadium_name      VARCHAR, pulled out of the struct
+   stadium.cityName  -> city_name         VARCHAR, pulled out of the struct
+   stadium.capacity  -> stadium_capacity  BIGINT, pulled out of the struct
+   imagery.teamLogo  -> logo_path         VARCHAR, pulled out of the struct
+   ```
+
+   The other 6 raw columns and the rest of both structs are dropped.
+
+   `stg_standings`, 54 rows, one per team per block, key
+   `standing_key`, unique per `(type, team_id)`:
+
+   ```
+   (built by you)          -> standing_key     one column, unique per (type, team_id)
+   type                    -> type             VARCHAR, 'table' | 'home' | 'away'
+   team_id                 -> team_id          VARCHAR, unchanged
+   short_name              -> team_name        VARCHAR, unchanged
+   stats: rank             -> rank             INTEGER
+   stats: points           -> points           INTEGER
+   stats: matches-played   -> played           INTEGER
+   stats: win              -> won              INTEGER
+   stats: draw             -> drawn            INTEGER
+   stats: lose             -> lost             INTEGER
+   stats: goals-for        -> goals_for        INTEGER
+   stats: goals-against    -> goals_against    INTEGER
+   stats: goal-difference  -> goal_difference  INTEGER
+   stats: movement         -> movement         VARCHAR, 'up' | 'down' | 'stable', no quotes
+   stats: form             -> form             VARCHAR, the JSON list text as is; NULL on home and away rows
+   ```
+
+   `stats: rank` means the `statsValue` of the entry in the `stats`
+   list whose `statsId` is `rank`. The `team` entry and the other 17
+   raw columns are dropped.
+
+   `stg_teamstats`, 76,648 rows, key `team_stat_key`, unique per
+   `(match_id, stats_id)`:
+
+   ```
+   (built by you)     -> team_stat_key  one column, unique per (match_id, stats_id)
+   match_id           -> match_id       VARCHAR, unchanged
+   stats_id           -> stat_id        VARCHAR, unchanged
+   stats_label        -> stat_label     VARCHAR, unchanged
+   stats_unit         -> stat_unit      VARCHAR, unchanged
+   stats_value_home   -> home_value     DOUBLE, unchanged
+   stats_value_away   -> away_value     DOUBLE, unchanged
+   ```
+
+   The two abbreviation columns are dropped.
+
+   `stg_playerstats`, 1,370,733 rows, key `player_stat_key`, unique
+   per `(match_id, player_id, stats_id)`:
+
+   ```
+   (built by you)  -> player_stat_key  one column, unique per (match_id, player_id, stats_id)
+   match_id        -> match_id         VARCHAR, unchanged
+   player_id       -> player_id        VARCHAR, unchanged
+   team_id         -> team_id          VARCHAR, unchanged
+   stats_id        -> stat_id          VARCHAR, unchanged
+   stats_label     -> stat_label       VARCHAR, unchanged
+   stats_unit      -> stat_unit        VARCHAR, unchanged
+   stats_value     -> value            DOUBLE, unchanged
+   ```
+
+   The two abbreviation columns are dropped. The raw table has
+   1,387,916 rows, this model has 1,370,733, one per key.
+6. Every model declares its key in YAML with exactly one `unique` and
+   one `not_null` test, on the key column named above, nothing else.
+   Six models, twelve tests.
+7. Verify with `dbt show`: the exact results in the target output.
+8. Run `uv run load.py`, then `uv run dbt build` again. Same last two
+   lines. `load.py` drops and recreates every raw table, staging must
+   not care.
+9. In chat: your `unique` test on `stg_playerstats` fails on the raw
+   grain, 17,183 keys twice. Say what you found when you looked at
+   the doubled rows, what staging does about it, and why that is
+   safe. Then the opposite case: if the two copies had carried
+   different values, what should staging do instead?
+
+**Withheld, all of them "how", none of them "what":** how a list of
+structs holding JSON text becomes the twelve typed columns above. How
+one key column is built from a two- or three-column grain. What
+staging does to get from 1,387,916 rows to 1,370,733. And whether
+each model is a view or a table: 1.37 million rows either recompute
+on every query or sit on disk, and that choice is per model.
+
+---
+
+## Hard (optional): form as rows
+
+`form` on the 18 `table` rows of `stg_standings` is the JSON list
+text, six entries, most recent result first: Al Nassr's reads
+`W D W L W W` and their last six matches, newest first, went W, D,
+W, L, W, W. Lesson 5 wants "last five results" per team as rows.
+
+**Target output**
+
+```
+Processed: 7 models | 14 tests
+Summary: 21 total | 21 success
+```
+
+```sql
+select result, count(*) from {{ ref('stg_standings_form') }} group by 1
+-- L 42 / W 41 / D 25
+```
+
+**Spec**
+
+10. Build `stg_standings_form` from `ref('stg_standings')`, the 18
+    `table` rows only. 108 rows, key `form_key`, unique per
+    `(team_id, position)`. Same YAML rule: one `unique`, one
+    `not_null`, on the key.
+
+    ```
+    (built by you)      -> form_key   one column, unique per (team_id, position)
+    team_id             -> team_id    VARCHAR
+    list index          -> position   INTEGER, 1 = most recent, 6 = oldest
+    formType of entry   -> result     VARCHAR, 'W' | 'D' | 'L'
+    ```
+
+**Withheld:** how JSON list text becomes rows with a position.
+
+---
+
+## Reference
+
+### dbt in six lines
 
 A dbt project is a folder with `dbt_project.yml` and a `models/`
 folder. A model is a `.sql` file holding one `select`; its file name
@@ -33,7 +348,7 @@ adds its own). Note for the Python client: fetching a `TIMESTAMPTZ`
 column through `duckdb.connect()` needs `pytz`; cast it to
 `VARCHAR` in the query and it does not.
 
-## Input
+### The six raw tables
 
 The six raw tables, as lesson 3 left them. Column names are already
 snake_case. Every id column is a `VARCHAR` URN.
@@ -176,285 +491,3 @@ Also two ids for minutes: `minutes` on all 12,164 entries,
 `minsPlayed` on 9,214. Where both exist they are equal; `minsPlayed`
 is missing exactly on the 2,950 entries where `minutes` is 0. Not
 this lesson's decision either; lesson 5 needs it for per-90.
-
-## Easy tier (start here)
-
-1. Add `dbt` to the project. Create a dbt project in a
-  folder at the repo root. The folder name is yours; the project
-   `name` is `dawri`. The profile points at `data/dawri.duckdb` and
-   lands models in schema `staging`. `uv run dbt debug` passes.
-2. Declare `raw.matches` as a source. Build `stg_matches`: one row
-  per match, read through `source()`, exactly these 16 output
-   columns, in this order. Left is the raw column, right is what
-   leaves the model. Nothing else leaves; the other 20 raw columns
-   are dropped.
-
-```
-match_id               -> match_id            VARCHAR, unchanged
-match_date_utc         -> kickoff_utc         a timestamp type, your choice
-match_date_local       -> kickoff_local       TIMESTAMP
-local_time_utc_offset  -> utc_offset          VARCHAR, unchanged
-status                 -> status              VARCHAR, unchanged
-win_reason             -> win_reason          VARCHAR, unchanged
-win_team_id            -> win_team_id         VARCHAR, unchanged
-home_score_push        -> home_score          BIGINT, unchanged
-away_score_push        -> away_score          BIGINT, unchanged
-time                   -> minutes_played      INTEGER
-additional_time        -> additional_minutes  INTEGER
-home.teamId            -> home_team_id        VARCHAR, pulled out of the struct
-away.teamId            -> away_team_id        VARCHAR, pulled out of the struct
-match_set.matchSetId   -> matchday_id         VARCHAR, pulled out of the struct
-stadium_name           -> stadium_name        VARCHAR, unchanged
-city_name              -> city_name           VARCHAR, unchanged
-```
-
-   The three structs do not leave the model. Team names, logos and
-   matchday names live in `raw.teams` and `raw.matchdays`; the ids
-   above are the join keys to them. The one open choice is the type
-   of `kickoff_utc`: `TIMESTAMP` or `TIMESTAMPTZ`. Step 4 is where
-   you defend it.
-3. Run `uv run dbt build`. Last two lines:
-
-```
-Processed: 1 model
-Summary: 1 total | 1 success
-```
-
-   Then `uv run dbt show --inline "select count(*) as n from    {{ ref('stg_matches') }}"`:
-
-```
-|   n |
-| --- |
-| 306 |
-```
-
-1. Answer here, in words: the raw string is `16:05Z`. One cast gives
-  back `16:05:00`, the other `19:05:00+03`. Are those the same
-   instant? Which type did your model choose, and what does the
-   `+03` on the way out depend on, so what would the same query
-   print on a machine set to UTC? Then: if lesson 5 wants "kickoff
-   in Riyadh local time", which of `match_date_utc`,
-   `match_date_local` and `local_time_utc_offset` does it build from,
-   and why not the other two? Say how you checked, not just the
-   answer.
-
-**Withheld:** which timestamp type `kickoff_utc` gets. That decision
-is the lesson, and step 4 is where you make the case for it.
-
-## Mid tier (builds on easy)
-
-1. Stage the other five. Same format as step 2: left is the raw
-  column, right is what leaves the model, in this order, nothing
-   else leaves. Every model also has one key column, named below,
-   that is unique per row. Where the grain is two or three raw
-   columns, how you make one key column out of them is withheld.
-   `stg_matchdays`, 34 rows, key `matchday_id`:
-
-```
-match_set_id     -> matchday_id   VARCHAR, unchanged
-name             -> name          VARCHAR, unchanged
-short_name       -> short_name    VARCHAR, unchanged
-start_date_utc   -> start_utc     the type you gave kickoff_utc
-end_date_utc     -> end_utc       the type you gave kickoff_utc
-matchday_status  -> status        VARCHAR, unchanged
-```
-
-   The other 8 raw columns are dropped.
-
-   `stg_teams`, 18 rows, key `team_id`:
-
-```
-team_id           -> team_id           VARCHAR, unchanged
-short_name        -> short_name        VARCHAR, unchanged
-official_name     -> official_name     VARCHAR, unchanged
-acronym_name      -> acronym           VARCHAR, unchanged
-country_code      -> country_code      VARCHAR, unchanged
-stadium.name      -> stadium_name      VARCHAR, pulled out of the struct
-stadium.cityName  -> city_name         VARCHAR, pulled out of the struct
-stadium.capacity  -> stadium_capacity  BIGINT, pulled out of the struct
-imagery.teamLogo  -> logo_path         VARCHAR, pulled out of the struct
-```
-
-   The other 6 raw columns and the rest of both structs are dropped.
-
-   `stg_standings`, 54 rows, one per team per block, key
-   `standing_key`, unique per `(type, team_id)`:
-
-```
-(built by you)          -> standing_key     one column, unique per (type, team_id)
-type                    -> type             VARCHAR, 'table' | 'home' | 'away'
-team_id                 -> team_id          VARCHAR, unchanged
-short_name              -> team_name        VARCHAR, unchanged
-stats: rank             -> rank             INTEGER
-stats: points           -> points           INTEGER
-stats: matches-played   -> played           INTEGER
-stats: win              -> won              INTEGER
-stats: draw             -> drawn            INTEGER
-stats: lose             -> lost             INTEGER
-stats: goals-for        -> goals_for        INTEGER
-stats: goals-against    -> goals_against    INTEGER
-stats: goal-difference  -> goal_difference  INTEGER
-stats: movement         -> movement         VARCHAR, 'up' | 'down' | 'stable', no quotes
-stats: form             -> form             VARCHAR, the JSON list text as is; NULL on home and away rows
-```
-
-   `stats: rank` means the `statsValue` of the entry in the `stats`
-   list whose `statsId` is `rank`. The `team` entry and the other 17
-   raw columns are dropped.
-
-   `stg_teamstats`, 76,648 rows, key `team_stat_key`, unique per
-   `(match_id, stats_id)`:
-
-```
-(built by you)     -> team_stat_key  one column, unique per (match_id, stats_id)
-match_id           -> match_id       VARCHAR, unchanged
-stats_id           -> stat_id        VARCHAR, unchanged
-stats_label        -> stat_label     VARCHAR, unchanged
-stats_unit         -> stat_unit      VARCHAR, unchanged
-stats_value_home   -> home_value     DOUBLE, unchanged
-stats_value_away   -> away_value     DOUBLE, unchanged
-```
-
-   The two abbreviation columns are dropped.
-
-   `stg_playerstats`, 1,370,733 rows, key `player_stat_key`, unique
-   per `(match_id, player_id, stats_id)`:
-
-```
-(built by you)  -> player_stat_key  one column, unique per (match_id, player_id, stats_id)
-match_id        -> match_id         VARCHAR, unchanged
-player_id       -> player_id        VARCHAR, unchanged
-team_id         -> team_id          VARCHAR, unchanged
-stats_id        -> stat_id          VARCHAR, unchanged
-stats_label     -> stat_label       VARCHAR, unchanged
-stats_unit      -> stat_unit        VARCHAR, unchanged
-stats_value     -> value            DOUBLE, unchanged
-```
-
-   The two abbreviation columns are dropped. The raw table has
-   1,387,916 rows; this model has 1,370,733, one per key.
-
-1. Every model declares its key in YAML with exactly one `unique`
-  and one `not_null` test, on the key column named above, nothing
-   else. Six models, twelve tests. `uv run dbt build`, last two
-   lines:
-
-```
-Processed: 6 models | 12 tests
-Summary: 18 total | 18 success
-```
-
-1. Verify with `dbt show`, exact results:
-
-```sql
-select count(*) from {{ ref('stg_playerstats') }}     -- 1370733
-select count(*) from {{ ref('stg_teamstats') }}       --   76648
-select count(*) from {{ ref('stg_standings') }}       --      54
-
-select type, team_name, rank, points, goal_difference
-from {{ ref('stg_standings') }}
-where type = 'table' order by rank
--- table Al Nassr 1 86 63 / table Al Hilal 2 84 58 / table Al Ahli 3 81 46 ...
-
-select type, sum(won) from {{ ref('stg_standings') }} group by 1
--- table 236 / home 135 / away 101
-```
-
-1. Run `uv run load.py`, then `uv run dbt build` again. Same last
-  two lines. `load.py` drops and recreates every raw table; staging
-   must not care.
-2. Answer here, in words: your `unique` test on `stg_playerstats`
-  fails on the raw grain, 17,183 keys twice. Say what you found
-   when you looked at the doubled rows, what staging does about it,
-   and why that is safe. Then the opposite case: if the two copies
-   had carried different values, what should staging do instead?
-
-**Withheld, all of them "how", none of them "what":** how a list of
-structs holding JSON text becomes the twelve typed columns above.
-How one key column is built from a two- or three-column grain. What staging does to get from 1,387,916
-rows to 1,370,733. And whether each model is a view or a table:
-1.37 million rows either recompute on every query or sit on disk,
-and that choice is per model.
-
-## Hard tier (optional)
-
-`form` on the 18 `table` rows of `stg_standings` is the JSON list
-text, six entries, most recent result first: Al Nassr's reads
-`W D W L W W` and their last six matches, newest first, went W, D,
-W, L, W, W. Lesson 5 wants "last five results" per team as rows.
-
-1. Build `stg_standings_form` from `ref('stg_standings')`, the 18
-  `table` rows only. 108 rows, key `form_key`, unique per
-    `(team_id, position)`:
-
-```
-(built by you)      -> form_key   one column, unique per (team_id, position)
-team_id             -> team_id    VARCHAR
-list index          -> position   INTEGER, 1 = most recent, 6 = oldest
-formType of entry   -> result     VARCHAR, 'W' | 'D' | 'L'
-```
-
-```
-Same YAML rule, so:
-```
-
-```
-Processed: 7 models | 14 tests
-Summary: 21 total | 21 success
-```
-
-```
-And:
-```
-
-```sql
-select result, count(*) from {{ ref('stg_standings_form') }} group by 1
--- L 42 / W 41 / D 25
-```
-
-**Withheld:** how JSON list text becomes rows with a position.
-
-## Constraints
-
-- Models read the raw tables through `source()` only. No model
-reads `data/*.json`. Zero network.
-- dbt never writes to schema `raw`. `load.py` owns it and rebuilds
-it from scratch; step 8 is the check.
-- `ingest.py`, `contracts.py` and `load.py` are never modified.
-- The database path in the profile is relative to the project, not
-absolute, and `profiles.yml` lives in the repo, not in `~/.dbt`.
-This repo runs on the Mac and the Linux box; a path with a home
-directory in it works on one of them. dbt's `target/`, `logs/`
-and `dbt_packages/` are gitignored.
-- Column names stay snake_case. Renames are allowed and expected
-where a raw name says nothing (`home_score_push`).
-- `stg_teamstats` and `stg_playerstats` stay long: one row per
-stat. 322 and 324 ids do not become columns here. Lesson 5 picks
-which ones do. Stat values stay numbers.
-- `stg_standings` is wide: the 12 ids are the same on every row, so
-they are columns, with the names and types in step 5.
-- Exactly one `unique` and one `not_null` test per model, on its
-key. The `Summary:` total is exact because of this rule.
-- Use the tools people use. dbt packages (`dbt_utils`,
-`dbt_expectations`, ...), macros and dbt's own features are
-encouraged: the point of working in dbt is exposure to its
-ecosystem. Add a package through `packages.yml`, run `dbt deps`,
-commit `package-lock.yml`. Know what the macro compiles to
-(`dbt compile` shows it), so you can defend it.
-
-
-
-## Rules
-
-- No skeleton on purpose. The design decisions are the lesson.
-- `dbt` is the real dependency and you add it. That is dbt v2, the
-Fusion engine: a Rust binary with the DuckDB adapter built in.
-`uv add dbt` on Python 3.14 gives 2.0.4 today. On first run it
-downloads the DuckDB driver once and caches it; after that it is
-offline. The `Summary:` lines above are that version's format.
-- No Python file this lesson, so `ruff` and `ty` have nothing to
-check. Two gates: `uv run dbt debug`, then `uv run dbt build`.
-- Answer steps 4 and 9 here in words, not in a file.
-- When it builds and the lines match, tell me and I will review
-your models.
-

@@ -1,10 +1,161 @@
-# Lesson 1 build task: land the raw season
+# L1: land the raw season
+
+## The concept
+
+### The problem
 
 Dawri is a Saudi Pro League data product. Over this track it grows
-into raw landing, DuckDB, dbt staging and marts, a metrics layer,
-an API and a dashboard. This lesson is the first stage only: get
-raw match data from the source onto disk, unchanged, in a way the
-next stages can trust.
+into raw landing, DuckDB, dbt staging and marts, a metrics layer, an
+API and a dashboard. Today none of that exists, and all the data sits
+on someone else's server: the backend of spl.com.sa. Three things make
+that a problem:
+
+1. **Every later stage trusts the first one.** DuckDB, dbt and the
+   dashboard will all be built from what is on disk. If the first
+   stage quietly changes the data, every stage after it is wrong and
+   nothing will say so.
+2. **You do not know yet what you will need.** Filter or reshape on
+   the way in, and a question you think of in lesson 6 means pulling
+   the whole season again. A repaired or reshaped raw file cannot be
+   re-parsed for something you did not think of today.
+3. **The source is not free and not still.** A season is 616 requests
+   and roughly 250 MB, and the server must not be hammered. The live
+   season answers HTTP 200 with an empty body for matches that have
+   not been played.
+
+### What we want
+
+The whole 2025/26 season on disk, byte for byte as the source sent it,
+in a layout the next stages can trust. Running it again costs zero
+requests.
+
+### What you will understand at the end
+
+| Idea | In one line |
+|---|---|
+| Raw landing | The first stage copies, it never edits. Raw files are the one thing you can always rebuild everything else from. |
+| Identity of a pull | A file's path and name are a decision: they say what one raw pull is. |
+| Idempotent reruns | "Already landed" needs a definition, and comparing bytes is not it: every response carries a fresh `apiCallRequestTime`. |
+| A 200 is not data (hard) | The source says "nothing yet" with a 200 and nulls. Landed means it carries data. |
+
+Easy decides the identity of one pull. Mid makes the full season
+rerunnable. Hard meets a season that is still moving.
+
+### Before and after
+
+```
+BEFORE                              AFTER
+data lives on spl.com.sa            data/ holds 2025/26, exact bytes
+nothing on disk                     616 files, ~250 MB
+every question is a request         a rerun makes 0 requests
+```
+
+Guardrails for every tier:
+
+- The saved body is the exact bytes the source sent.
+- Every match appears once in the landed data. `distinct: 306` is the check.
+- Four requests per second, at most.
+- A null-stats 200 is never stored as if it were a landed match.
+- Code goes in `ingest.py` at the repo root. `httpx` is already added, standard library for the rest.
+- Everything lands under `data/`, which is gitignored.
+- Gates: `uv run ruff check`, `uv run ty check`, then `uv run ingest.py`.
+
+---
+
+## Easy: one pull, on disk
+
+**Target output**
+
+```
+landed 306 matches for 2025/2026
+```
+
+**Spec**
+
+1. Fetch `/matches` for 2025/2026.
+2. Save the response body to disk under `data/`, byte for byte as
+   received. No reshaping, no filtering.
+3. Print the one line above.
+4. In chat: open the saved file. The season has 34 matchdays, but
+   every match's `roundId` is null and so is every matchday's
+   `roundId`. Which field on a match points at which field on a
+   matchday? Say how you found it, not just the answer.
+
+**Withheld:** what identifies one raw pull on disk, and so what its
+path and name are. That decision is the lesson.
+
+---
+
+## Mid: the whole season, rerunnable
+
+**Target output**
+
+```
+requests: N
+matches: 306
+distinct: 306
+teamstats: 306
+playerstats: 306
+```
+
+`N` is yours to report: above 0 on the first run, exactly 0 on the
+second. All four counts are exact and are read back from the landed
+files on disk, not from the responses you just got:
+
+```
+matches       match objects in the landed season file
+distinct      distinct matchId
+teamstats     landed files that actually carry data
+playerstats   landed files that actually carry data
+```
+
+**Spec**
+
+5. Land the whole 2025/26 season: the four season-level endpoints,
+   then `teamstats` and `playerstats` for every match. 616 requests,
+   roughly 250 MB. No more than four requests per second.
+6. A second run makes zero requests. The easy-tier code stays as it
+   is and gets called, not rewritten.
+7. After each run, read the landed files back from disk and print the
+   five lines above.
+
+**Withheld:** what "already landed" means. Note before you decide:
+every response carries `apiCallRequestTime`, set to the moment you
+asked. Two pulls of an unchanged match are never the same bytes.
+
+---
+
+## Hard (optional): the live season
+
+The 2026/27 season is live: 306 matches, some FINISHED, the rest
+UPCOMING. The split moves every matchday, and a match's stats only
+exist once it has been played. The source does not 404 for a match
+with no stats yet. It returns HTTP 200 and this:
+
+```json
+{"stats": null, "matchId": null, "status": null,
+ "apiCallRequestTime": "2026-09-08T07:10:11.259Z"}
+```
+
+`playerstats` does the same with `"players": null`.
+
+**Target output**
+
+Two runs back to back. The second one requests the season-level
+endpoints plus only the unfinished matches, and says so. No exact
+output here.
+
+**Spec**
+
+8. Land 2026/27. A rerun re-requests the season-level endpoints, and
+   of the match-level ones only those whose match was not FINISHED the
+   last time you landed it. Print which matches it refreshed.
+
+---
+
+## Reference
+
+### The source
 
 The source is the Saudi Pro League's own API, the backend of
 spl.com.sa. No key, no auth. It is Opta-fed: every object carries
@@ -19,7 +170,7 @@ Ids are URNs and the `::` must be percent-encoded as `%3A%3A` in
 the path. Every endpoint takes `?locale=en-GB`. `ar-SA` also works
 and is a later lesson.
 
-## The endpoints
+### The endpoints
 
 Season level, one request each:
 
@@ -42,7 +193,7 @@ There are more (`matches/{matchId}/header`, `match/{matchId}/matchfacts`,
 inconsistency you will hit later: `header` sits under `matches/`,
 the stats sit under `match/`.
 
-## The ids
+### The ids
 
 Competition, the only one:
 
@@ -67,7 +218,7 @@ You can also read this list from
 `{BASE}/competitions/{competitionId}/seasons`. Whether you hardcode
 or fetch is yours.
 
-## Input
+### Response shapes
 
 Response shapes, the parts you need. Everything else stays in the
 file untouched.
@@ -128,102 +279,3 @@ distinct `statsId` values including `expected-goals`,
 `statsValueHome` and `statsValueAway` per entry.
 
 The 2025/26 season has 306 matches and all 306 are FINISHED.
-
-## Easy tier (start here)
-
-1. Fetch `/matches` for 2025/2026.
-2. Save the response body to disk under `data/`, byte for byte as
-   received. No reshaping, no filtering.
-3. Print one line:
-
-```
-landed 306 matches for 2025/2026
-```
-
-4. Then open the saved file and answer here, in words: the season
-   has 34 matchdays, but every match's `roundId` is null and so is
-   every matchday's `roundId`. Which field on a match points at
-   which field on a matchday? Say how you found it, not just the
-   answer.
-
-**Withheld:** what identifies one raw pull on disk, and so what
-its path and name are. That decision is the lesson.
-
-## Mid tier (builds on easy)
-
-5. Land the whole 2025/26 season: the four season-level endpoints,
-   then `teamstats` and `playerstats` for every match. That is 616
-   requests and roughly 250 MB on disk. Do not hammer the source:
-   no more than four requests per second.
-6. Running it a second time must make zero requests. The easy-tier
-   code stays as it is and gets called, not rewritten.
-7. After each run, read the landed files back from disk (not the
-   responses you just got) and print:
-
-```
-requests: N
-matches: 306
-distinct: 306
-teamstats: 306
-playerstats: 306
-```
-
-`N` is yours to report. It is above 0 on the first run and exactly
-0 on the second. `matches` counts match objects in the landed
-season file. `distinct` counts distinct `matchId`. `teamstats` and
-`playerstats` count landed files that actually carry data. All
-four numbers are exact.
-
-**Withheld:** what "already landed" means. Note before you decide:
-every response carries `apiCallRequestTime`, set to the moment you
-asked. Two pulls of an unchanged match are never the same bytes.
-
-## Hard tier (optional)
-
-The 2026/27 season is live right now: 306 matches, of which some
-are FINISHED and the rest are UPCOMING. That split moves every
-matchday, and a match's stats only exist once it has been played.
-
-The source does not 404 for a match with no stats yet. It returns
-HTTP 200 and this:
-
-```json
-{"stats": null, "matchId": null, "status": null,
- "apiCallRequestTime": "2026-09-08T07:10:11.259Z"}
-```
-
-`playerstats` does the same with `"players": null`. A 200 is not
-proof you have data.
-
-8. Land 2026/27. A rerun must re-request the season-level
-   endpoints, and of the match-level ones only those whose match
-   was not FINISHED the last time you landed it. Print which
-   matches it refreshed.
-
-Pass condition: two runs back to back; the second one requests the
-season-level endpoints plus only the unfinished matches, and says
-so. No exact output here.
-
-## Constraints
-
-- The saved body is the exact bytes the source sent. Later stages
-  need to re-parse it, and a repaired or reshaped raw file cannot
-  be re-parsed for something you did not think of today.
-- Every match appears once in the landed data. `distinct: 306` is
-  the check.
-- Four requests per second, at most.
-- A null-stats 200 is never stored as if it were a landed match.
-
-## Rules
-
-- No skeleton on purpose. The design decisions are the lesson.
-- `httpx` is the real dependency and is already added. Standard
-  library for everything else.
-- Write it in `ingest.py` at the repo root. Where files live later
-  is a later lesson.
-- `data/` is gitignored. Everything you land goes under it.
-- Three gates: `uv run ruff check`, `uv run ty check`, then
-  `uv run ingest.py`.
-- Answer step 4 here in words, not in the file.
-- When it runs and the output matches, tell me and I will review
-  your code.
