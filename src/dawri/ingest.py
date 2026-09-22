@@ -1,7 +1,7 @@
-import argparse
 import json
 import time
 from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 from urllib.parse import quote
 
@@ -13,6 +13,8 @@ SEASONS = {
     "2025/2026": "0de9cda0d297418699a8357a8825d46c",
     "2026/2027": "3677a75aaa514e43b2840e7fa367c91d",
 }
+
+Season = Enum("Season", {key: key for key in SEASONS})
 LIVE_SEASON = "2026/2027"
 
 
@@ -248,13 +250,6 @@ def count_stat_files(directory: Path, payload_key: str) -> int:
     return count
 
 
-def parse_season() -> tuple[str, str]:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("season", choices=SEASONS)
-    args = parser.parse_args()
-    return args.season, SEASONS[args.season]
-
-
 def cleaned_match_id(match: dict) -> str:
     return match["matchId"].replace("spl::Football_Match::", "")
 
@@ -319,8 +314,8 @@ def land_match_family(
     return requests
 
 
-def main() -> None:
-    season_text, season_id = parse_season()
+def main(season_text: str) -> None:
+    season_id = SEASONS[season_text]
     refresh_season_level = season_text == LIVE_SEASON
     request_count = 0
 
@@ -401,15 +396,27 @@ def main() -> None:
     landed_matches = json.loads(matches_path(season_id=season_id).read_bytes())[
         "matches"
     ]
+    finished = sum(1 for match in landed_matches if match.get("status") == "FINISHED")
+
+    teamstats = count_stat_files(
+        directory=Path("data/teamstats") / season_id, payload_key="stats"
+    )
+    playerstats = count_stat_files(
+        directory=Path("data/playerstats") / season_id, payload_key="players"
+    )
+    lineups = count_stat_files(
+        directory=Path("data/lineups") / season_id, payload_key="home"
+    )
+    matchfacts = count_stat_files(
+        directory=Path("data/matchfacts") / season_id, payload_key="referees"
+    )
+    feed = count_stat_files(
+        directory=Path("data/feed") / season_id, payload_key="events"
+    )
+
     print(f"requests: {request_count}")
-    print(f"matches: {len(landed_matches)}")
-    print(f"distinct: {len({match['matchId'] for match in landed_matches})}")
-    print(f"teamstats: {count_stat_files(Path('data/teamstats'), 'stats')}")
-    print(f"playerstats: {count_stat_files(Path('data/playerstats'), 'players')}")
-    print(f"lineups: {count_stat_files(Path('data/lineups'), 'home')}")
-    print(f"matchfacts: {count_stat_files(Path('data/matchfacts'), 'referees')}")
-    print(f"feed: {count_stat_files(Path('data/feed'), 'events')}")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"{season_text} finished: {finished} of {len(landed_matches)}")
+    print(
+        f"{season_text} landed: {teamstats} teamstats, {playerstats} playerstats, "
+        f"{lineups} lineups, {matchfacts} matchfacts, {feed} feed"
+    )

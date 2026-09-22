@@ -6,7 +6,7 @@ import duckdb as db
 import pyarrow as pa
 from pydantic.alias_generators import to_snake
 
-import contracts
+from dawri import contracts
 
 DATA_GLOB = Path("data")
 DB_PATH = Path("data/dawri.duckdb")
