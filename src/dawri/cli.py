@@ -8,8 +8,7 @@ from contextlib import contextmanager
 
 import typer
 
-from dawri import ingest, load
-from dawri.config import DATA_DIR, DBT_DIR, LOG_PATH
+from dawri import config, ingest, load
 
 app = typer.Typer()
 
@@ -22,8 +21,8 @@ def setup(
         False, "--verbose", help="Also show INFO log lines on stderr."
     ),
 ) -> None:
-    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(LOG_PATH)
+    config.LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = logging.FileHandler(config.LOG_PATH)
     file_handler.setLevel(logging.INFO)
     stderr_handler = logging.StreamHandler()
     stderr_handler.setLevel(logging.INFO if verbose else logging.WARNING)
@@ -34,7 +33,9 @@ def setup(
     formatter.converter = time.gmtime
     for handler in (file_handler, stderr_handler):
         handler.setFormatter(formatter)
-    logging.basicConfig(level=logging.INFO, handlers=[file_handler, stderr_handler])
+    logging.basicConfig(
+        level=logging.INFO, handlers=[file_handler, stderr_handler], force=True
+    )
 
 
 @contextmanager
@@ -75,7 +76,7 @@ def build_() -> None:
             raise typer.Exit(code=1)
         env: dict[str, str] = {
             **os.environ,
-            "DAWRI_DATA_DIR": str(DATA_DIR),
+            "DAWRI_DATA_DIR": str(config.DATA_DIR),
             "NO_COLOR": "1",
         }
         result = subprocess.run(  # noqa: S603
@@ -83,9 +84,9 @@ def build_() -> None:
                 dbt,
                 "build",
                 "--project-dir",
-                str(DBT_DIR),
+                str(config.DBT_DIR),
                 "--profiles-dir",
-                str(DBT_DIR),
+                str(config.DBT_DIR),
             ],
             env=env,
             check=False,

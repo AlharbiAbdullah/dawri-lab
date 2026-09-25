@@ -7,8 +7,7 @@ import duckdb as db
 import pyarrow as pa
 from pydantic.alias_generators import to_snake
 
-from dawri import contracts
-from dawri.config import DATA_DIR, DB_PATH
+from dawri import config, contracts
 
 log = logging.getLogger("dawri.load")
 
@@ -225,7 +224,7 @@ def file_digest(path: Path) -> str:
 
 
 def family_root(table_name: str) -> Path:
-    return DATA_DIR / FAMILY_DIRS.get(table_name, table_name)
+    return config.DATA_DIR / FAMILY_DIRS.get(table_name, table_name)
 
 
 def ensure_ledger(conn: db.DuckDBPyConnection) -> None:
@@ -365,7 +364,7 @@ def load_family(conn: db.DuckDBPyConnection, table_name: str) -> int:
     if not root.exists():
         return 0
     for path in sorted(root.rglob("*.json")):
-        relative = path.relative_to(DATA_DIR).as_posix()
+        relative = path.relative_to(config.DATA_DIR).as_posix()
         digest = file_digest(path)
         if ledger_digest(conn, relative, table_name) == digest:
             continue
@@ -385,7 +384,7 @@ def load_family(conn: db.DuckDBPyConnection, table_name: str) -> int:
 
 def contract_from_files() -> tuple[int, int, int]:
     valid = rejected = skipped = 0
-    matches_dir = DATA_DIR / "matches"
+    matches_dir = config.DATA_DIR / "matches"
     if not matches_dir.exists():
         return 0, 0, 0
     for path in sorted(matches_dir.glob("*.json")):
@@ -400,7 +399,7 @@ def contract_from_files() -> tuple[int, int, int]:
 def prune_missing(conn: db.DuckDBPyConnection) -> None:
     rows = conn.execute("SELECT file_path, table_name FROM raw._load_ledger").fetchall()
     for file_path, table_name in rows:
-        path = DATA_DIR / str(file_path)
+        path = config.DATA_DIR / str(file_path)
         if path.exists():
             continue
         season_id = season_id_from_relative(str(file_path))
@@ -427,7 +426,7 @@ def count_table(conn: db.DuckDBPyConnection, table_name: str) -> int:
 
 
 def main() -> None:
-    with db.connect(DB_PATH) as conn:
+    with db.connect(config.DB_PATH) as conn:
         ensure_ledger(conn)
         reset_tables_without_ledger(conn)
         loaded = 0

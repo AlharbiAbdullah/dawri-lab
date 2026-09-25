@@ -1,3 +1,5 @@
+{{ config(tags=['full_data']) }}
+
 select
     m.season_id,
     m.type,

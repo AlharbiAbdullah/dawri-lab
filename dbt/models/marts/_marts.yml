@@ -25,6 +25,8 @@ models:
       - dbt_expectations.expect_table_row_count_to_equal:
           arguments:
             value: 108
+          config:
+            tags: ['full_data']
 
       - dbt_utils.equality:
           arguments:
@@ -43,6 +45,8 @@ models:
               - goals_against
               - goal_difference
               - points
+          config:
+            tags: ['full_data']
 
   - name: fct_goals
     columns:
@@ -56,6 +60,8 @@ models:
       - dbt_expectations.expect_table_row_count_to_equal:
           arguments:
             value: 17
+          config:
+            tags: ['full_data']
     columns:
       - name: match_id
         data_tests:

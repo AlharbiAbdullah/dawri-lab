@@ -1,0 +1,30 @@
+unit_tests:
+  - name: head_to_head_beats_goal_difference
+    description: >
+      A and B finish level on points. A beat B, so A ranks above B even
+      though B has the better goal difference. C and D drew each other,
+      so goal difference decides. The upcoming match does not count.
+    model: mart_standings
+    given:
+      - input: ref('stg_matches')
+        rows:
+          - {season_id: s1, match_id: m1, status: FINISHED, home_team_id: A, away_team_id: B, home_score: 1, away_score: 0}
+          - {season_id: s1, match_id: m2, status: FINISHED, home_team_id: C, away_team_id: B, home_score: 0, away_score: 5}
+          - {season_id: s1, match_id: m3, status: FINISHED, home_team_id: C, away_team_id: D, home_score: 0, away_score: 0}
+          - {season_id: s1, match_id: m4, status: UPCOMING, home_team_id: D, away_team_id: A, home_score: null, away_score: null}
+      - input: ref('stg_teams')
+        rows:
+          - {season_id: s1, team_id: A, short_name: Alpha}
+          - {season_id: s1, team_id: B, short_name: Beta}
+          - {season_id: s1, team_id: C, short_name: Gamma}
+          - {season_id: s1, team_id: D, short_name: Delta}
+    expect:
+      rows:
+        - {type: table, rank: 1, team_id: A, points: 3, goal_difference: 1}
+        - {type: table, rank: 2, team_id: B, points: 3, goal_difference: 4}
+        - {type: table, rank: 3, team_id: D, points: 1, goal_difference: 0}
+        - {type: table, rank: 4, team_id: C, points: 1, goal_difference: -5}
+        - {type: home, rank: 1, team_id: A, points: 3, goal_difference: 1}
+        - {type: home, rank: 2, team_id: C, points: 1, goal_difference: -5}
+        - {type: away, rank: 1, team_id: B, points: 3, goal_difference: 4}
+        - {type: away, rank: 2, team_id: D, points: 1, goal_difference: 0}
