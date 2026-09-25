@@ -3,5 +3,5 @@ dawri:
   outputs:
     dev:
       type: duckdb
-      path: ../data/dawri.duckdb
+      path: "{{ env_var('DAWRI_DATA_DIR') }}/dawri.duckdb"
       schema: staging

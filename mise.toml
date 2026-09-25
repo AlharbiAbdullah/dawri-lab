@@ -1,0 +1,2 @@
+[env]
+DAWRI_DATA_DIR = "{{ get_env(name='DAWRI_DATA_DIR', default=config_root ~ '/data') }}"

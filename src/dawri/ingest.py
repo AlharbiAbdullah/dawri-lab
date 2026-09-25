@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from collections.abc import Callable
 from enum import Enum
@@ -7,15 +8,11 @@ from urllib.parse import quote
 
 import httpx
 
-BASE = "https://api-sdp.spl.com.sa/v1/spl/football"
-REQUEST_GAP = 0.25
-SEASONS = {
-    "2025/2026": "0de9cda0d297418699a8357a8825d46c",
-    "2026/2027": "3677a75aaa514e43b2840e7fa367c91d",
-}
+from dawri.config import BASE_URL, DATA_DIR, LIVE_SEASON, REQUEST_GAP, SEASONS
+
+log = logging.getLogger("dawri.ingest")
 
 Season = Enum("Season", {key: key for key in SEASONS})
-LIVE_SEASON = "2026/2027"
 
 
 # ensure the directory exists
@@ -25,62 +22,62 @@ def ensure_dir(path: Path) -> None:
 
 # get the path to the matches for a given season
 def matches_path(season_id: str) -> Path:
-    storage_path = "data/matches"
+    storage_path = DATA_DIR / "matches"
     return Path(f"{storage_path}/{season_id}.json")
 
 
 # get the path to the matchdays for a given season
 def matchdays_path(season_id: str) -> Path:
-    storage_path = "data/matchdays"
+    storage_path = DATA_DIR / "matchdays"
     return Path(f"{storage_path}/{season_id}.json")
 
 
 # get the path to the standings for a given season
 def standings_path(season_id: str) -> Path:
-    storage_path = "data/standings"
+    storage_path = DATA_DIR / "standings"
     return Path(f"{storage_path}/{season_id}.json")
 
 
 # get the path to the teams for a given season
 def teams_path(season_id: str) -> Path:
-    storage_path = "data/teams"
+    storage_path = DATA_DIR / "teams"
     return Path(f"{storage_path}/{season_id}.json")
 
 
 # get the path to the teamstats for a given season
 def teamstats_path(season_id: str, match_id: str) -> Path:
-    storage_path = "data/teamstats"
+    storage_path = DATA_DIR / "teamstats"
     return Path(f"{storage_path}/{season_id}/{match_id}.json")
 
 
 # get the path to the playerstats for a given season
 def playerstats_path(season_id: str, match_id: str) -> Path:
-    storage_path = "data/playerstats"
+    storage_path = DATA_DIR / "playerstats"
     return Path(f"{storage_path}/{season_id}/{match_id}.json")
 
 
 # get the path to the lineups for a given season
 def lineups_path(season_id: str, match_id: str) -> Path:
-    storage_path = "data/lineups"
+    storage_path = DATA_DIR / "lineups"
     return Path(f"{storage_path}/{season_id}/{match_id}.json")
 
 
 # get the path to the matchfacts for a given season
 def matchfacts_path(season_id: str, match_id: str) -> Path:
-    storage_path = "data/matchfacts"
+    storage_path = DATA_DIR / "matchfacts"
     return Path(f"{storage_path}/{season_id}/{match_id}.json")
 
 
 # get the path to the feed for a given season
 def feed_path(season_id: str, match_id: str) -> Path:
-    storage_path = "data/feed"
+    storage_path = DATA_DIR / "feed"
     return Path(f"{storage_path}/{season_id}/{match_id}.json")
 
 
 # fetch matches for a given season
 def fetch_matches(season_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
-    url = f"{BASE}/seasons/{encoded_season_id}/matches?locale=en-GB"
+    url = f"{BASE_URL}/seasons/{encoded_season_id}/matches?locale=en-GB"
     response = httpx.get(url)
     response.raise_for_status()
     return response.content
@@ -89,7 +86,7 @@ def fetch_matches(season_id: str) -> bytes:
 # fetch matchdays for a given season
 def fetch_matchday(season_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
-    url = f"{BASE}/seasons/{encoded_season_id}/matchdays?locale=en-GB"
+    url = f"{BASE_URL}/seasons/{encoded_season_id}/matchdays?locale=en-GB"
     response = httpx.get(url)
     response.raise_for_status()
     return response.content
@@ -98,7 +95,7 @@ def fetch_matchday(season_id: str) -> bytes:
 # fetch teams for a given season
 def fetch_teams(season_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
-    url = f"{BASE}/seasons/{encoded_season_id}/teams?locale=en-GB"
+    url = f"{BASE_URL}/seasons/{encoded_season_id}/teams?locale=en-GB"
     response = httpx.get(url)
     response.raise_for_status()
     return response.content
@@ -107,7 +104,7 @@ def fetch_teams(season_id: str) -> bytes:
 # fetch standings for a given season
 def fetch_standings(season_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
-    url = f"{BASE}/seasons/{encoded_season_id}/standings/overall?locale=en-GB"
+    url = f"{BASE_URL}/seasons/{encoded_season_id}/standings/overall?locale=en-GB"
     response = httpx.get(url)
     response.raise_for_status()
     return response.content
@@ -118,7 +115,7 @@ def fetch_teamstats(season_id: str, match_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
     encoded_match_id = quote(match_id, safe="")
     url = (
-        f"{BASE}/seasons/{encoded_season_id}"
+        f"{BASE_URL}/seasons/{encoded_season_id}"
         f"/match/{encoded_match_id}/teamstats?locale=en-GB"
     )
     response = httpx.get(url)
@@ -131,7 +128,7 @@ def fetch_playerstats(season_id: str, match_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
     encoded_match_id = quote(match_id, safe="")
     url = (
-        f"{BASE}/seasons/{encoded_season_id}"
+        f"{BASE_URL}/seasons/{encoded_season_id}"
         f"/match/{encoded_match_id}/playerstats?locale=en-GB"
     )
     response = httpx.get(url)
@@ -144,7 +141,7 @@ def fetch_lineups(season_id: str, match_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
     encoded_match_id = quote(match_id, safe="")
     url = (
-        f"{BASE}/seasons/{encoded_season_id}"
+        f"{BASE_URL}/seasons/{encoded_season_id}"
         f"/matches/{encoded_match_id}/lineups?locale=en-GB"
     )
     response = httpx.get(url)
@@ -157,7 +154,7 @@ def fetch_matchfacts(season_id: str, match_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
     encoded_match_id = quote(match_id, safe="")
     url = (
-        f"{BASE}/seasons/{encoded_season_id}"
+        f"{BASE_URL}/seasons/{encoded_season_id}"
         f"/match/{encoded_match_id}/matchfacts?locale=en-GB"
     )
     response = httpx.get(url)
@@ -170,7 +167,7 @@ def fetch_feed(season_id: str, match_id: str) -> bytes:
     encoded_season_id = quote(f"spl::Football_Season::{season_id}", safe="")
     encoded_match_id = quote(match_id, safe="")
     url = (
-        f"{BASE}/seasons/{encoded_season_id}"
+        f"{BASE_URL}/seasons/{encoded_season_id}"
         f"/matches/{encoded_match_id}/feed?locale=en-GB"
     )
     response = httpx.get(url)
@@ -284,6 +281,7 @@ def land_season_file(
     refresh: bool,
 ) -> tuple[dict, int]:
     if refresh or not path.exists():
+        log.info("request: %s", path.relative_to(DATA_DIR))
         body = fetch(season_id)
         write(body, season_id)
         time.sleep(REQUEST_GAP)
@@ -306,6 +304,7 @@ def land_match_family(
         match_id = cleaned_match_id(match)
         if dest(season_id, match_id).exists():
             continue
+        log.info("request: %s", dest(season_id, match_id).relative_to(DATA_DIR))
         body = fetch(season_id, match["matchId"])
         requests += 1
         if has_data(json.loads(body)):
@@ -399,19 +398,19 @@ def main(season_text: str) -> None:
     finished = sum(1 for match in landed_matches if match.get("status") == "FINISHED")
 
     teamstats = count_stat_files(
-        directory=Path("data/teamstats") / season_id, payload_key="stats"
+        directory=DATA_DIR / "teamstats" / season_id, payload_key="stats"
     )
     playerstats = count_stat_files(
-        directory=Path("data/playerstats") / season_id, payload_key="players"
+        directory=DATA_DIR / "playerstats" / season_id, payload_key="players"
     )
     lineups = count_stat_files(
-        directory=Path("data/lineups") / season_id, payload_key="home"
+        directory=DATA_DIR / "lineups" / season_id, payload_key="home"
     )
     matchfacts = count_stat_files(
-        directory=Path("data/matchfacts") / season_id, payload_key="referees"
+        directory=DATA_DIR / "matchfacts" / season_id, payload_key="referees"
     )
     feed = count_stat_files(
-        directory=Path("data/feed") / season_id, payload_key="events"
+        directory=DATA_DIR / "feed" / season_id, payload_key="events"
     )
 
     print(f"requests: {request_count}")

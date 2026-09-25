@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 import duckdb as db
@@ -7,9 +8,10 @@ import pyarrow as pa
 from pydantic.alias_generators import to_snake
 
 from dawri import contracts
+from dawri.config import DATA_DIR, DB_PATH
 
-DATA_GLOB = Path("data")
-DB_PATH = Path("data/dawri.duckdb")
+log = logging.getLogger("dawri.load")
+
 FAMILY_DIRS = {
     "lineup_events": "lineups",
     "match_facts": "matchfacts",
@@ -223,7 +225,7 @@ def file_digest(path: Path) -> str:
 
 
 def family_root(table_name: str) -> Path:
-    return DATA_GLOB / FAMILY_DIRS.get(table_name, table_name)
+    return DATA_DIR / FAMILY_DIRS.get(table_name, table_name)
 
 
 def ensure_ledger(conn: db.DuckDBPyConnection) -> None:
@@ -363,7 +365,7 @@ def load_family(conn: db.DuckDBPyConnection, table_name: str) -> int:
     if not root.exists():
         return 0
     for path in sorted(root.rglob("*.json")):
-        relative = path.relative_to(DATA_GLOB).as_posix()
+        relative = path.relative_to(DATA_DIR).as_posix()
         digest = file_digest(path)
         if ledger_digest(conn, relative, table_name) == digest:
             continue
@@ -377,12 +379,13 @@ def load_family(conn: db.DuckDBPyConnection, table_name: str) -> int:
         insert_rows(conn, table_name, snake_rows(rows, season_id))
         upsert_ledger(conn, relative, table_name, digest)
         loaded += 1
+        log.info("loaded: %s -> raw.%s (%s rows)", relative, table_name, len(rows))
     return loaded
 
 
 def contract_from_files() -> tuple[int, int, int]:
     valid = rejected = skipped = 0
-    matches_dir = DATA_GLOB / "matches"
+    matches_dir = DATA_DIR / "matches"
     if not matches_dir.exists():
         return 0, 0, 0
     for path in sorted(matches_dir.glob("*.json")):
@@ -397,7 +400,7 @@ def contract_from_files() -> tuple[int, int, int]:
 def prune_missing(conn: db.DuckDBPyConnection) -> None:
     rows = conn.execute("SELECT file_path, table_name FROM raw._load_ledger").fetchall()
     for file_path, table_name in rows:
-        path = DATA_GLOB / str(file_path)
+        path = DATA_DIR / str(file_path)
         if path.exists():
             continue
         season_id = season_id_from_relative(str(file_path))

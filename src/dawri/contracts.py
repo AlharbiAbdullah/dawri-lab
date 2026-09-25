@@ -13,7 +13,9 @@ from pydantic import (
     model_validator,
 )
 
-DIR = "data/matches"
+from dawri.config import DATA_DIR
+
+DIR = DATA_DIR / "matches"
 
 
 class TeamContract(BaseModel):
