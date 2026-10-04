@@ -1,0 +1,105 @@
+models:
+  - name: metricflow_time_spine
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+
+  - name: fct_team_matches
+    semantic_model:
+      enabled: true
+    agg_time_dimension: kickoff_utc
+    columns:
+      - name: team_match_key
+        entity:
+          type: primary
+          name: team_match
+        data_tests:
+          - unique
+          - not_null
+      - name: team_id
+        entity:
+          type: foreign
+          name: team
+      - name: kickoff_utc
+        granularity: day
+        dimension:
+          type: time
+      - name: season_id
+        dimension:
+          type: categorical
+      - name: venue
+        dimension:
+          type: categorical
+      - name: result
+        dimension:
+          type: categorical
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['W', 'D', 'L']
+
+    metrics:
+      - name: matches_played
+        type: simple
+        label: Played
+        description: Finished matches
+        agg: count
+        expr: 1
+      - name: points
+        type: simple
+        label: Points
+        description: 3 for a win, 1 for a draw
+        agg: sum
+        expr: points
+      - name: goals_for
+        type: simple
+        label: Goals for
+        agg: sum
+        expr: goals_for
+      - name: goals_against
+        type: simple
+        label: Goals against
+        agg: sum
+        expr: goals_against
+      - name: xg_for
+        type: simple
+        label: xG for
+        agg: sum
+        expr: xg_for
+      - name: xg_against
+        type: simple
+        label: xG against
+        agg: sum
+        expr: xg_against
+      - name: shots
+        type: simple
+        label: Shots
+        agg: sum
+        expr: shots
+      - name: shots_on_target
+        type: simple
+        label: Shots on target
+        agg: sum
+        expr: shots_on_target
+
+      - name: goal_difference
+        type: derived
+        label: Goal difference
+        expr: goals_for - goals_against
+        input_metrics:
+          - name: goals_for
+          - name: goals_against
+      - name: xg_difference
+        type: derived
+        label: xG difference
+        expr: xg_for - xg_against
+        input_metrics:
+          - name: xg_for
+          - name: xg_against
+      - name: points_per_match
+        type: ratio
+        label: Points per match
+        numerator: points
+        denominator: matches_played
