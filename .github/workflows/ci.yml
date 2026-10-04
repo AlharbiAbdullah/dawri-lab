@@ -7,10 +7,15 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      DAWRI_DATA_DIR: ${{ runner.temp }}/data
+      NO_COLOR: "1"
     steps:
       - uses: actions/checkout@v5
 
       - uses: astral-sh/setup-uv@v6
+
+      - uses: jdx/mise-action@v2
 
       - name: Install
         run: uv sync --locked
@@ -25,11 +30,11 @@ jobs:
         run: uv run pytest
 
       - name: dbt on recorded data
-        env:
-          DAWRI_DATA_DIR: ${{ runner.temp }}/data
-          NO_COLOR: "1"
         run: |
           cp -r tests/fixtures/recorded "$DAWRI_DATA_DIR"
           uv run dawri load
           uv run dbt deps --project-dir dbt --profiles-dir dbt
           uv run dbt build --project-dir dbt --profiles-dir dbt --exclude tag:full_data
+
+      - name: Semantic check
+        run: mise run semantic-check

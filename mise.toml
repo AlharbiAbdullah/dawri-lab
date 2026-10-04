@@ -1,10 +1,30 @@
 [env]
 DAWRI_DATA_DIR = "{{ get_env(name='DAWRI_DATA_DIR', default=config_root ~ '/data') }}"
 
+[vars]
+ossie_convert = "uvx --from 'git+https://github.com/apache/ossie@adfa9e4#subdirectory=converters/dbt' ossie-dbt msi-to-ossie -i dbt/target/semantic_manifest.json --model-name dawri"
+
 [tasks.ossie]
 description = "Regenerate semantic/dawri.ossie.yaml from dbt and validate it"
 run = [
-  "uvx --from 'git+https://github.com/apache/ossie@adfa9e4#subdirectory=converters/dbt' ossie-dbt msi-to-ossie -i dbt/target/semantic_manifest.json -o semantic/dawri.ossie.yaml --model-name dawri",
+  "{{vars.ossie_convert}} -o semantic/dawri.ossie.yaml",
   "uv run scripts/ossie_summary.py semantic/dawri.ossie.yaml",
 ]
 
+[tasks.semantic-check]
+description = "Fail if the Ossie document is stale or the two engines disagree"
+run = [
+  '''
+  set -e
+  out=$(mktemp)
+  trap 'rm -f "$out"' EXIT
+  {{vars.ossie_convert}} -o "$out" > /dev/null
+  if cmp -s "$out" semantic/dawri.ossie.yaml; then
+    echo "ossie: semantic/dawri.ossie.yaml matches dbt"
+  else
+    echo "semantic/dawri.ossie.yaml is stale"
+    exit 1
+  fi
+  ''',
+  "uv run scripts/parity.py",
+]
