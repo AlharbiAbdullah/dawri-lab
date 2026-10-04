@@ -22,6 +22,11 @@ models:
         entity:
           type: foreign
           name: team
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_teams')
+                field: team_id
       - name: kickoff_utc
         granularity: day
         dimension:
@@ -103,3 +108,18 @@ models:
         label: Points per match
         numerator: points
         denominator: matches_played
+
+  - name: dim_teams
+    semantic_model:
+      enabled: true
+    columns:
+      - name: team_id
+        entity:
+          type: primary
+          name: team
+        data_tests:
+          - unique
+          - not_null
+      - name: team_name
+        dimension:
+          type: categorical

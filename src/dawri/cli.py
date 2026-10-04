@@ -5,10 +5,11 @@ import subprocess
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Annotated
 
 import typer
 
-from dawri import config, ingest, load
+from dawri import config, ingest, load, semantic
 
 app = typer.Typer()
 
@@ -102,6 +103,27 @@ def build_() -> None:
         if result.returncode != 0:
             log.error("build failed: dbt exited %s", result.returncode)
             raise typer.Exit(code=result.returncode)
+
+
+@app.command(name="metrics")
+def metrics_(
+    season: ingest.Season,
+    metric: Annotated[
+        list[str] | None,
+        typer.Option("--metric", help="A metric from the Ossie document. Repeatable."),
+    ] = None,
+) -> None:
+    with step("metrics", season.value):
+        con = semantic.connect()
+        try:
+            header, rows = semantic.team_metrics(con, season.value, metric)
+        except semantic.UnknownMetric as exc:
+            typer.echo(f"unknown metric: {exc}", err=True)
+            raise typer.Exit(code=1) from None
+        finally:
+            con.close()
+        for line in semantic.to_csv_lines(header, rows):
+            print(line)
 
 
 @app.command(name="run")

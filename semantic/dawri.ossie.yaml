@@ -1,5 +1,24 @@
 name: dawri
 datasets:
+- name: dim_teams
+  source: '"dawri"."marts"."dim_teams"'
+  primary_key:
+  - team_id
+  description: ''
+  fields:
+  - name: team
+    expression:
+      dialects:
+      - dialect: ANSI_SQL
+        expression: team_id
+    description: ''
+  - name: team_name
+    expression:
+      dialects:
+      - dialect: ANSI_SQL
+        expression: team_name
+    dimension:
+      is_time: false
 - name: fct_team_matches
   source: '"dawri"."marts"."fct_team_matches"'
   primary_key:
@@ -46,6 +65,14 @@ datasets:
         expression: result
     dimension:
       is_time: false
+relationships:
+- name: fct_team_matches__dim_teams__team
+  from: fct_team_matches
+  to: dim_teams
+  from_columns:
+  - team_id
+  to_columns:
+  - team_id
 metrics:
 - name: goal_difference
   expression:
