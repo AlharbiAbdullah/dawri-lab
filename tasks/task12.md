@@ -26,8 +26,8 @@ dashboard on localhost. Nothing else can ask. Three symptoms:
 Pydantic response model, and described by an OpenAPI document the app
 publishes itself. Standings come from `mart_standings`, metrics from
 the lesson 10 definitions (same numbers as `dawri metrics`, `mf` and
-Rill), match detail from the facts of lesson 6. `dawri run` works while
-the API is serving. Errors are part of the contract: a wrong season is
+Rill), match detail from the facts of lesson 6. `dawri build` works
+while the API is serving. Errors are part of the contract: a wrong season is
 404, a wrong parameter is 422, and a request never gets a 500 because a
 build is running.
 
@@ -58,8 +58,9 @@ Guardrails for every tier:
   lessons 5, 6 and 10 return for the same question.
 - Read only. No endpoint writes, deletes, triggers a run or accepts a
   body. `GET` only.
-- `dawri run` succeeds while `dawri serve` is running and being
-  queried (lesson 11's rule, now for the API).
+- Lesson 10's 2026/2027 freeze holds: no 2026/2027 ingest.
+- From mid on, `dawri load && dawri build` succeeds while `dawri serve`
+  is running and being queried (lesson 11's rule, now for the API).
 - Tests never open a socket (lesson 9's rule): the app is called in
   process, and the suite stays under 10 seconds.
 - `data/` and `logs/dawri.log` untouched by `uv run pytest`.
@@ -77,8 +78,8 @@ Guardrails for every tier:
 **Target output**
 
 ```
-$ uv run dawri serve          (second terminal)
-INFO:     Uvicorn running on http://127.0.0.1:8000 ...
+$ uv run dawri --verbose serve          (second terminal)
+...Z INFO uvicorn.error Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 
 $ curl -s localhost:8000/health
 {"status":"ok"}
@@ -110,7 +111,9 @@ $ uv run pytest
 1. `uv add fastapi uvicorn`. `src/dawri/api.py` holds the app.
 2. `dawri serve`, a new command: runs the app with uvicorn on
    `127.0.0.1`, port 8000, `--port` to change it. Logging goes through
-   lesson 8's setup, not a second one.
+   lesson 8's setup, not a second one: uvicorn's lines come out in
+   lesson 8's format, go to `logs/dawri.log`, and reach stderr only
+   with `--verbose`, like every other INFO line.
 3. Seasons in URLs are written `2025-2026`. The config names stay
    `2025/2026`; the JSON shows the config name.
 4. Endpoints:
@@ -156,6 +159,7 @@ $ uv run pytest
 **Withheld:** how the tests get a database with the marts built from
 recorded data without running dbt in every test, and still under 10
 seconds. How one database connection (or none) serves many requests.
+How uvicorn is kept from setting up its own logging.
 
 ---
 
@@ -186,7 +190,7 @@ $ curl -s localhost:8000/matches/cb556acbac334114887ef91fcb725e0c
            "player_name":"A. Lacazette","goal_type":"goal"}]}
 
 $ (with dawri serve running and a loop requesting /seasons every 0.1 s)
-$ uv run dawri run 2026/2027 > /dev/null; echo $?
+$ (uv run dawri load && uv run dawri build) > /dev/null; echo $?
 0                     <- and the loop saw only 200s
 
 $ uv run pytest
@@ -196,16 +200,18 @@ $ uv run pytest
 **Spec**
 
 6. `GET /seasons/{season}/metrics?metric=<name>&metric=<name>...`
-   - One or more `metric` values, each one of the eleven lesson 10
-     metric names. The answer comes from the lesson 10 definitions the
-     same way `dawri metrics` does (same code, not a copy of it). No
-     metric expression is written in `api.py`.
+   - One or more `metric` values, each a metric in
+     `semantic/dawri.ossie.yaml` (eleven today). The answer comes from
+     the same code as `dawri metrics --metric` (lesson 10), not a copy
+     of it. No metric expression or metric name is written in
+     `api.py`.
    - 200: one object per team with a finished match in that season:
      `team_name`, then each metric in the order asked. Ordered by the
      first metric descending, then team name. Floats rounded to two
      decimals, integers stay integers.
-   - 422 `unknown metric: <name>. Known: <all eleven, sorted, comma
-     separated>` for any unknown name. 422 when no metric is given.
+   - 422 `unknown metric: <name>. Known: <every metric in the document,
+     sorted, comma separated>` for any unknown name. 422 when no metric
+     is given.
      404 for an unknown season, same as standings.
 7. `GET /matches/{match_id}`, the 32-character hex id (the part after
    `spl::Football_Match::`):
@@ -218,16 +224,24 @@ $ uv run pytest
    - 404 `unknown match: <id>` for a well-formed id that is not in the
      data. 422 for anything that is not 32 lowercase hex characters.
 8. Serving during a build: the target output's loop sees only 200s
-   while `dawri run` runs, and `dawri run` exits 0. A request during
-   the build answers from the last good data. This is lesson 11 mid's
-   problem again. If you solved it there, reuse the answer.
+   while `dawri load && dawri build` runs, and it exits 0. A request
+   during the build answers from the last good data.
+   - Easy read `data/dawri.duckdb`. From here the API reads lesson 11
+     mid's serving copy, and never `data/dawri.duckdb`.
+   - The copy now also carries `staging.stg_matches` and
+     `staging.stg_lineups`, the two staging tables the API reads.
+   - The metrics endpoint reads the copy under the catalog name
+     `dawri`, because the Ossie document's sources are
+     `dawri.marts.<table>`.
+   - If you skipped lesson 11 mid, its steps 7 to 9 are the spec.
 9. Six more tests in `tests/test_api.py`:
 
    ```
    test_metrics_recorded        2026-2027, metric=points&metric=xg_for:
                                 NEOM SC 3 1.30, Al Kholood 1 1.41,
                                 Diriyah 1 0.56, Al Faisaly 0 0.60
-   test_metrics_unknown_422     metric=elo, detail lists all eleven
+   test_metrics_unknown_422     metric=elo, detail lists every metric
+                                in the document, read from the document
    test_match_finished          cb556: the target output's body exactly
    test_match_upcoming          a10a6: status UPCOMING, scores null,
                                 goals [], kickoff "2026-10-09T13:50:00Z"

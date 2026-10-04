@@ -36,7 +36,7 @@ table that someone has to know how to ask for. Three symptoms:
 ### What we want
 
 `rill start rill` opens a Dawri dashboard on the lesson 10 metrics,
-with the same names and the same numbers. `dawri run` works while the
+with the same names and the same numbers. `dawri build` works while the
 dashboard is open, and the dashboard shows the new numbers without a
 restart. A check proves Rill's numbers equal lesson 10's for every team
 in both seasons. In the hard tier, Rill's metrics are generated from
@@ -65,6 +65,8 @@ Rill YAML written by hand               generated from the Ossie document (hard)
 
 Guardrails for every tier:
 
+- Lesson 10's 2026/2027 freeze holds: no 2026/2027 ingest, so no
+  `dawri run 2026/2027`. `dawri load && dawri build` is the writer.
 - The numbers do not move. Lesson 10's gates still pass unchanged.
 - Rill's measures use lesson 10's eleven metric names exactly. A
   measure Rill shows that lesson 10 does not have is out of scope.
@@ -160,9 +162,9 @@ The quoting in `--properties` is not decoration: see Reference.
    The Explore dashboard is declared inside the metrics view file, with
    every dimension and measure.
 
-4. `rill/apis/team_metrics.yaml`: a custom API that returns season,
-   team name, points, goal difference, xG for and xG against for every
-   season and team: 36 rows (18 teams x 2 seasons).
+4. `rill/apis/team_metrics.yaml`: a custom API that returns
+   `season_id`, `team_name` and all eleven measures for every season
+   and team: 36 rows (18 teams x 2 seasons).
 5. Open the dashboard and use it: pick 2026/27, split by venue, look at
    xG difference. Nothing to hand in for this step, but step 6 needs
    it.
@@ -189,12 +191,20 @@ $ uv run dawri build
 Processed: 17 models | 43 tests | 1 unit test
 Summary: 61 total | 61 success          <- no lock error
 
-$ (throwaway edit: fct_team_matches keeps only kickoffs before 2026-09-01)
-$ uv run dawri build && <query Rill: 2026/2027 matches_played, points>
-70,95                                   <- was 126,170; Rill not restarted
+$ (throwaway edit 1: fct_team_matches doubles xg_for)
+$ uv run dawri build && <query Rill: 2026/2027 xg_for>
+372.08                                  <- was 186.04; Rill not restarted
 $ (edit reverted)
 $ uv run dawri build && <same query>
-126,170
+186.04
+
+$ (throwaway edit 2: fct_team_matches keeps only kickoffs before 2026-09-01)
+$ uv run dawri build; echo $?
+...
+1                                       <- assert_team_matches_rebuild_standings fails
+$ <query Rill: 2026/2027 matches_played, points>
+126,170                                 <- still the last good data
+$ (edit reverted, uv run dawri build)
 
 $ mise run rill-parity
 rill parity 2025/2026: 18 teams, 0 differences
@@ -203,22 +213,30 @@ rill parity 2026/2027: 18 teams, 0 differences
 
 **Spec**
 
-7. `dawri build` and `dawri run` succeed while `rill start rill` is
+7. `dawri load` and `dawri build` succeed while `rill start rill` is
    running and being queried. Nothing in Rill or Dawri is stopped,
    restarted or retried by hand.
-8. After a build, the next Rill query answers from the new data, with
-   Rill still running. The throwaway edit in the target output is the
-   proof: 70 team rows and 95 points before 2026-09-01, 126 and 170
-   after the revert.
+8. After a green build, the next Rill query answers from the new data,
+   with Rill still running. Throwaway edit 1 in the target output is
+   the proof: 2026/27 `xg_for` is 372.08 after the edit and 186.04
+   after the revert (at two decimals). No dbt test reads xG, so the
+   build stays green.
 9. A reader never sees half a build. Whatever Rill reads is replaced
    whole, in one step, only after the dbt build succeeds. A failed
-   build leaves Rill answering from the last good data.
+   build leaves Rill answering from the last good data. Throwaway edit
+   2 is the proof: it fails `assert_team_matches_rebuild_standings`,
+   `dawri build` exits 1, and Rill still answers 126 and 170.
+   - What Rill reads (the serving copy) holds every table in schema
+     `marts`, published as one unit.
+   - Rill's tables keep their dbt names, `fct_team_matches` and
+     `dim_teams`. The hard tier needs them (step 12).
+   - Lesson 12's API reads the same copy.
 10. `mise run rill-parity`, with Rill running: for each season, fetch
-    the `team_metrics` API and compare every team's points, goal
-    difference, xG for and xG against with `dawri metrics` (lesson 10),
-    xG at two decimals. Print the two lines in the target output. Exit
-    1 on any difference, on a team present on one side only, or when
-    Rill is not running (with a message that says so).
+    the `team_metrics` API and compare every team's eleven measures
+    with `dawri metrics --metric` for all eleven (lesson 10), floats at
+    two decimals. Print the two lines in the target output. Exit 1 on
+    any difference, on a team present on one side only, or when Rill
+    is not running (with a message that says so).
 11. `rill validate rill` still passes. The dashboard still works.
 
 **Withheld:** what Rill reads, if not `data/dawri.duckdb`, and who
@@ -384,8 +402,10 @@ Parquet view model     new file visible on the next query, no restart
 
 ```
 team_metrics API          36 rows
-2026/27 before 09-01      70 team rows, 95 points
-2026/27 all               126 team rows, 170 points
+2026/27 all               126 team rows, 170 points, xg_for 186.04
+2026/27 xg_for doubled    372.08 (throwaway edit 1)
+2026/27 before 09-01      70 team rows, 95 points (what edit 2 leaves in
+                          data/dawri.duckdb; Rill must not show it)
 2025/26 top 5 by points   Al Nassr 86, Al Hilal 84, Al Ahli 81,
                           Al Qadsiah 77, Al Ittihad 55
 ```

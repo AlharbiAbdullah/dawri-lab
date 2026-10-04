@@ -64,6 +64,12 @@ nothing stops the two drifting          CI regenerates and compares (hard)
 
 Guardrails for every tier:
 
+- 2026/2027 is frozen until lesson 13 mid. Every 2026/2027 number in
+  lessons 10 to 13 was measured on the data landed 2026-09-25, and
+  Matchday 8 is played from 2026-10-09. No `dawri ingest 2026/2027` and
+  no `dawri run 2026/2027` until lesson 13 says so. `dawri load && dawri
+  build` does every database write without a fetch. Keep a copy first:
+  `cp -r data ../dawri-data-2026-09-25` (405 MB).
 - The numbers do not move. `mart_standings` is untouched, and the new
   metrics must reproduce it: that is a test in the easy tier.
 - Latest dbt semantic YAML only: `semantic_model:` under the model,
@@ -273,6 +279,12 @@ Al Ittihad,17,6,14.12,9.96
 Al Nassr,16,9,11.96,5.70
 Al Qadsiah,16,8,16.42,6.73
 NEOM SC,15,7,9.46,7.81
+
+$ uv run dawri metrics 2025/2026 --metric points_per_match --metric matches_played | head -4
+team_name,points_per_match,matches_played
+Al Nassr,2.53,34
+Al Hilal,2.47,34
+Al Ahli,2.38,34
 ```
 
 **Spec**
@@ -299,22 +311,29 @@ NEOM SC,15,7,9.46,7.81
 10. `mise run ossie` now writes 2 datasets and 1 relationship. Nothing
     about the relationship is written by hand.
 
-11. `dawri metrics SEASON`, a new command. SEASON is the same choice as
-    `dawri ingest`. It answers from `semantic/dawri.ossie.yaml` through
-    DuckDB's `ossie` community extension, reading
-    `data/dawri.duckdb` read-only. It never writes SQL for a metric:
-    the metric expressions come from the document.
+11. `dawri metrics SEASON [--metric NAME]...`, a new command. SEASON is
+    the same choice as `dawri ingest`. It answers from
+    `semantic/dawri.ossie.yaml` through DuckDB's `ossie` community
+    extension, reading `data/dawri.duckdb` read-only. It never writes
+    SQL for a metric: the metric expressions come from the document.
 
-    - stdout is CSV, header
-      `team_name,points,goal_difference,xg_for,xg_against`, one row per
-      team with a finished match in that season (18 on the real data).
-    - Ordered by points, then goal difference, both descending, then
-      team name.
-    - `xg_for` and `xg_against` always with two decimals (`5.70`, not
+    - stdout is CSV, one row per team with a finished match in that
+      season (18 on the real data).
+    - Without `--metric`: header
+      `team_name,points,goal_difference,xg_for,xg_against`, ordered by
+      points, then goal difference, both descending, then team name.
+    - With `--metric` (repeatable, any metric in the document): header
+      `team_name`, then the metrics in the order given, ordered by the
+      first metric descending, then team name. An unknown name exits 1
+      with `unknown metric: <name>` on stderr.
+    - Integer metrics print as integers. Float metrics (`xg_*`,
+      `points_per_match`) always print with two decimals (`5.70`, not
       `5.7`). The float sums differ from MetricFlow's in the last
       digits (`64.37749999999998` against `64.3775`), so two decimals
       is where the two engines are compared.
-    - Every line of both target blocks is exact on the real data.
+    - Lesson 11's parity check, lesson 12's API and lesson 13's brief
+      answer through the same code, not a copy of it.
+    - Every line of the three target blocks is exact on the real data.
 
 12. The extension and the converter disagree about the document. The
     converter writes Ossie `0.2.0.dev0`: one model at the root. The

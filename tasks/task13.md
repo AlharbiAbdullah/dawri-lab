@@ -11,8 +11,9 @@ Dawri senses (ingest), knows (marts, one metric definition), shows (a
 dashboard) and answers (an API). It never does anything. Three
 symptoms:
 
-1. **Nothing happens when something happens.** On 2026-10-09 Matchday
-   8 starts: nine matches, first against second on the Saturday. When
+1. **Nothing happens when something happens.** In the data frozen since
+   lesson 10, Matchday 8 is next: nine matches from 2026-10-09, first
+   against second on the Saturday. When
    those results land, Dawri will know them within one run, and nobody
    will hear about it until someone opens a dashboard and thinks to
    look.
@@ -20,18 +21,21 @@ symptoms:
    before a matchday (both teams' position, form, xG per match, their
    record against each other) are all in the marts. Putting them side
    by side takes four queries and a person who knows them.
-3. **Acting twice is as bad as never acting.** A run happens every day
-   (or twice, or retried). An actuator that announces the same result
-   at every run is noise, and one that loses track after a failed send
-   announces nothing. "Once per fact" needs a memory of what was done.
+3. **Acting on every run is noise, and losing track is silence.** A run
+   happens every day (or twice, or retried). An actuator that announces
+   the same result at every run is noise, and one that marks a note
+   sent before the send succeeded loses it when the send fails. "Once
+   per fact" needs a memory of what was done.
 
 ### What we want
 
 Before each matchday, Dawri writes a fixture brief: facts only, one
 block per match. After each run, Dawri writes a result note for every
-match that finished since it last acted. Each goes out once, through
-one channel, and a failed delivery is retried on the next run, never
-duplicated. In the hard tier, a timer runs the whole loop daily, and an
+match that finished since it last acted. Each goes out through one
+channel. A rerun never sends what was already delivered, and a failed
+delivery is retried on the next run. A crash between a send and its
+mark resends that one action once and never loses it: over a plain
+POST, that is the best any ledger can promise. In the hard tier, a timer runs the whole loop daily, and an
 AI may write the prose, but only numbers that are in the facts get
 through.
 
@@ -59,6 +63,9 @@ prose by hand or not at all             AI prose, every number checked (hard)
 
 Guardrails for every tier:
 
+- Lesson 10's 2026/2027 freeze holds until mid's second block, which
+  ends it on purpose. Every real-data line before that block is the
+  frozen data.
 - Facts only. Every number in a brief or a note is computed from landed
   data. No prediction, no odds, no "favourite", no "should win".
   Words like "form" mean the last five results, printed, nothing more.
@@ -107,9 +114,13 @@ $ uv run pytest
    | `xg_for_per_match` | ratio | `xg_for` over `matches_played` | xG for per match |
    | `xg_against_per_match` | ratio | `xg_against` over `matches_played` | xG against per match |
 
-   Lessons 10 and 11 now count 13 metrics wherever they said 11. If
-   you built lesson 11's hard tier, `mise run rill-sync` picks them up
-   with no other change. That is the point of it.
+   Lessons 10, 11 and 12 now count 13 metrics wherever they said 11.
+   - Lesson 12's metrics endpoint and its 422 list read the names from
+     the document, so they take the two new metrics with no edit.
+   - If you built lesson 11's hard tier, `mise run rill-sync` picks
+     them up with no other change. That is the point of it. Without
+     it, add the two measures to the metrics view by hand, so
+     `mise run rill-parity` still compares every metric.
 2. `dawri brief SEASON` writes the brief for the season's next
    matchday: the matchday of the earliest UPCOMING match. It prints the
    path it wrote, and nothing else, on stdout. Running it twice writes
@@ -190,12 +201,13 @@ ledger: 1 sent, 0 failed
 $ uv run dawri act
 ledger: 0 sent, 0 failed
 
-(after Matchday 8 is played and dawri run has landed it)
+(the freeze ends: uv run dawri run 2026/2027 lands every match played
+ since 2026-09-25)
 $ uv run dawri act
 sent: result-a10a6c353d734675b6e000b253df6335
-... (one line per newly finished match)
-sent: brief-2026-2027-md-9
-ledger: 10 sent, 0 failed
+... (one line per match finished since the freeze, kickoff order)
+sent: brief-2026-2027-md-<next matchday>
+ledger: <matches finished since the freeze + 1> sent, 0 failed
 
 $ uv run pytest
 <easy count + 5> passed
@@ -236,7 +248,9 @@ $ uv run pytest
    id>.md`. When `DAWRI_NOTIFY_URL` is set, it is also POSTed there:
    the Markdown as the body, the note's first line (without `# `) as a
    `Title` header. That is the ntfy.sh message format, and any webhook
-   that reads a body works. An action is marked done only after its
+   that reads a body works. Each POST also carries the action id as an
+   `Idempotency-Key` header, so a receiver that drops repeats can drop
+   the one resend a crash causes. An action is marked done only after its
    delivery succeeded. A failed POST (non-2xx or no connection) is
    counted in `failed`, left not done, and tried again on the next
    run. `dawri act` exits 1 when anything failed.
@@ -258,9 +272,10 @@ $ uv run pytest
     ```
 
 **Withheld:** where the ledger lives, given that `data/dawri.duckdb`
-is rebuilt and locked by other readers. How "mark done after the send"
-survives a crash between the two. How a test "unmarks" one action
-without reaching into your ledger's internals, or whether it should.
+is rebuilt and locked by other readers. How the mark is written so a
+crash leaves the ledger readable: either the action is marked or it
+is not, never half. How a test "unmarks" one action without reaching
+into your ledger's internals, or whether it should.
 
 ---
 
@@ -271,7 +286,7 @@ without reaching into your ledger's internals, or whether it should.
 ```
 $ systemctl --user list-timers dawri.timer
 NEXT                         LEFT      LAST  PASSED  UNIT         ACTIVATES
-Thu 2026-10-01 06:00:00 +03  ...       -     -       dawri.timer  dawri.service
+<tomorrow> 06:00:00 +03      ...       -     -       dawri.timer  dawri.service
 
 $ systemctl --user start dawri.service; journalctl --user -u dawri.service -n 3 -o cat
 ... ingest end ...
