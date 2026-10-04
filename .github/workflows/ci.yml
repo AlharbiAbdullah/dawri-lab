@@ -8,7 +8,6 @@ jobs:
   check:
     runs-on: ubuntu-latest
     env:
-      DAWRI_DATA_DIR: ${{ runner.temp }}/data
       NO_COLOR: "1"
     steps:
       - uses: actions/checkout@v5
@@ -16,6 +15,9 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - uses: jdx/mise-action@v2
+
+      - name: Data dir
+        run: echo "DAWRI_DATA_DIR=$RUNNER_TEMP/data" >> "$GITHUB_ENV"
 
       - name: Install
         run: uv sync --locked
