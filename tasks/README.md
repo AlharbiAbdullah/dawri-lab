@@ -1,6 +1,7 @@
 # Tasks
 
-One file per lesson. Every task has the same shape, top to bottom:
+One file per lesson. A lesson with paths has one file per path
+(`task11a.md`, `task11b.md`, `task11c.md`). Every task has the same shape, top to bottom:
 
 ```
 The concept

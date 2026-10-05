@@ -5,11 +5,11 @@
 ### The problem
 
 Dawri's facts can be read by a person at this machine: a terminal, a
-dashboard on localhost. Nothing else can ask. Three symptoms:
+page on localhost. Nothing else can ask. Three symptoms:
 
 1. **Every consumer needs a shell here.** A phone, a teammate's
-   script, lesson 13's actuator, an AI agent: each would have to run
-   `dawri metrics`, `mf query` or `rill query` on this machine and
+   script, lesson 14's actuator, an AI agent: each would have to run
+   `dawri metrics` or `mf query` on this machine and
    parse a terminal table or a CSV.
 2. **Every consumer opens the database itself.** Lesson 11 showed what
    that costs: one open reader and `dawri build` fails on the lock. Each
@@ -26,7 +26,7 @@ dashboard on localhost. Nothing else can ask. Three symptoms:
 Pydantic response model, and described by an OpenAPI document the app
 publishes itself. Standings come from `mart_standings`, metrics from
 the lesson 10 definitions (same numbers as `dawri metrics`, `mf` and
-Rill), match detail from the facts of lesson 6. `dawri build` works
+lesson 11c's page), match detail from the facts of lesson 6. `dawri build` works
 while the API is serving. Errors are part of the contract: a wrong season is
 404, a wrong parameter is 422, and a request never gets a 500 because a
 build is running.
@@ -226,14 +226,14 @@ $ uv run pytest
 8. Serving during a build: the target output's loop sees only 200s
    while `dawri load && dawri build` runs, and it exits 0. A request
    during the build answers from the last good data.
-   - Easy read `data/dawri.duckdb`. From here the API reads lesson 11
-     mid's serving copy, and never `data/dawri.duckdb`.
+   - Easy read `data/dawri.duckdb`. From here the API reads lesson
+     11a mid's serving copy, and never `data/dawri.duckdb`.
    - The copy now also carries `staging.stg_matches` and
      `staging.stg_lineups`, the two staging tables the API reads.
    - The metrics endpoint reads the copy under the catalog name
      `dawri`, because the Ossie document's sources are
      `dawri.marts.<table>`.
-   - If you skipped lesson 11 mid, its steps 7 to 9 are the spec.
+   - If you skipped lesson 11a mid, its steps 7 to 9 are the spec.
 9. Six more tests in `tests/test_api.py`:
 
    ```

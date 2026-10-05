@@ -1,4 +1,4 @@
-# L13: from insight to action (the actuator)
+# L14: from insight to action (the actuator)
 
 ## The concept
 
@@ -8,7 +8,7 @@
 > Mike Driscoll (Rill), in the Joe Reis interview in your notes
 
 Dawri senses (ingest), knows (marts, one metric definition), shows (a
-dashboard) and answers (an API). It never does anything. Three
+page) and answers (an API). It never does anything. Three
 symptoms:
 
 1. **Nothing happens when something happens.** In the data frozen since
@@ -117,10 +117,12 @@ $ uv run pytest
    Lessons 10, 11 and 12 now count 13 metrics wherever they said 11.
    - Lesson 12's metrics endpoint and its 422 list read the names from
      the document, so they take the two new metrics with no edit.
-   - If you built lesson 11's hard tier, `mise run rill-sync` picks
-     them up with no other change. That is the point of it. Without
-     it, add the two measures to the metrics view by hand, so
-     `mise run rill-parity` still compares every metric.
+   - Lesson 11a and 11b: `mise run rill-sync` and
+     `mise run evidence-sync` pick them up with no other change. That
+     is the point of generating from Ossie.
+   - Lesson 11c's team page: add the two names to its metric list,
+     after `xg_difference`. Nothing else changes, because the page
+     reads its numbers through `semantic.py`.
 2. `dawri brief SEASON` writes the brief for the season's next
    matchday: the matchday of the earliest UPCOMING match. It prints the
    path it wrote, and nothing else, on stdout. Running it twice writes

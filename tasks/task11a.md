@@ -1,4 +1,8 @@
-# L11: metrics as code, on a dashboard (Rill)
+# L11a: metrics as code, on a dashboard (Rill)
+
+Lesson 11 has three paths over the same Ossie document: 11a Rill,
+11b Evidence, 11c Streamlit. Ossie stays the one source in every path.
+This path owns the serving copy (mid) that 11c and lesson 12 read.
 
 ## The concept
 
@@ -16,9 +20,9 @@ table that someone has to know how to ask for. Three symptoms:
    source, Mike Driscoll's company, "BI as code") defines metrics in
    its own YAML: a metrics view with dimensions and measures. It reads
    neither dbt metrics nor Apache Ossie (checked 2026-09-30: nothing in
-   its docs, release notes 0.81 to 0.90, or the repo). So the first
-   dashboard puts every metric in a second place, and "one definition"
-   from lesson 10 is broken the moment it is useful.
+   its docs, release notes 0.81 to 0.90, or the repo). Written by hand,
+   that YAML is a second copy of every formula, and "one definition"
+   from lesson 10 breaks the moment the data becomes visible.
 3. **A reader locks out the writer.** DuckDB lets one process write a
    file or many processes read it, never both at once. Rill opens
    `data/dawri.duckdb` and keeps it open. While Rill runs,
@@ -35,12 +39,12 @@ table that someone has to know how to ask for. Three symptoms:
 
 ### What we want
 
-`rill start rill` opens a Dawri dashboard on the lesson 10 metrics,
-with the same names and the same numbers. `dawri build` works while the
+`rill start rill` opens a Dawri dashboard on the lesson 10 metrics.
+Rill's metrics view is generated from the Ossie document, never written
+by hand, so Ossie stays the one source. `dawri build` works while the
 dashboard is open, and the dashboard shows the new numbers without a
 restart. A check proves Rill's numbers equal lesson 10's for every team
-in both seasons. In the hard tier, Rill's metrics are generated from
-the Ossie document, so there is one definition again.
+in both seasons, and CI fails when the generated file goes stale.
 
 ### What you will understand at the end
 
@@ -48,19 +52,20 @@ the Ossie document, so there is one definition again.
 |---|---|
 | Metrics view | A table plus named dimensions and measures. A dashboard is a view over it, not a pile of queries. |
 | BI as code | The dashboard is YAML in git: reviewed, diffed, rebuilt from scratch, never clicked together. |
+| Generated definition | When a tool cannot read the shared definition, a generator writes the tool's copy from it. Nobody edits the copy. |
 | Single writer | An embedded database has one writer at a time. Serving and building need separate files, or turns. |
 | Serving copy | The pipeline publishes what readers read, whole and in one step, so they never see half a build. |
-| Parity across tools | When a tool cannot read the shared definition, a check that compares answers is what keeps them equal. |
+| Parity across tools | Two engines on one definition can still disagree. A check that compares answers is what proves they don't. |
 
 ### Before and after
 
 ```
 BEFORE                                  AFTER
 answers = typed mf queries              rill start rill: an Explore dashboard
-metrics defined in dbt only             same 11 names in a Rill metrics view
+metrics only in the Ossie document      Rill's measures generated from it (easy)
 Rill open -> dawri build fails          both run at once, no restart (mid)
-two definitions, nobody compares        rill parity: 36 rows, 0 differences (mid)
-Rill YAML written by hand               generated from the Ossie document (hard)
+two engines, nobody compares            rill parity: 36 rows, 0 differences (mid)
+a hand edit would drift silently        CI fails on a stale file (hard)
 ```
 
 Guardrails for every tier:
@@ -68,8 +73,8 @@ Guardrails for every tier:
 - Lesson 10's 2026/2027 freeze holds: no 2026/2027 ingest, so no
   `dawri run 2026/2027`. `dawri load && dawri build` is the writer.
 - The numbers do not move. Lesson 10's gates still pass unchanged.
-- Rill's measures use lesson 10's eleven metric names exactly. A
-  measure Rill shows that lesson 10 does not have is out of scope.
+- No measure expression is written by hand anywhere in `rill/`. Every
+  measure comes from the Ossie document, with its name.
 - Deterministic only: sums and ratios of what happened. No forecast,
   no anomaly score, no "trend" line that extrapolates.
 - Rill runs from the repo root (`rill start rill`,
@@ -82,13 +87,16 @@ Guardrails for every tier:
 
 ---
 
-## Easy: a dashboard on the marts
+## Easy: a dashboard generated from Ossie
 
 **Target output**
 
 ```
 $ rill version
 rill version v0.90.2 ...
+
+$ mise run rill-sync
+wrote rill/metrics/team_matches.yaml: 11 measures, 4 dimensions, timeseries kickoff_utc
 
 $ rill validate rill
 Resources
@@ -126,42 +134,29 @@ The quoting in `--properties` is not decoration: see Reference.
    ```
    rill/rill.yaml                   display_name Dawri, OLAP connector dawri
    rill/connectors/dawri.yaml       DuckDB, the file data/dawri.duckdb, read mode
-   rill/metrics/team_matches.yaml   the metrics view, with its Explore dashboard
+   rill/metrics/team_matches.yaml   generated: the metrics view and its Explore
    rill/apis/team_metrics.yaml      a custom API
    ```
 
-3. The metrics view `team_matches` on `marts.fct_team_matches`,
-   timeseries `kickoff_utc`, smallest time grain `day`.
+3. `mise run rill-sync` writes `rill/metrics/team_matches.yaml` from
+   `semantic/dawri.ossie.yaml`:
+   - the metrics view `team_matches` on `marts.fct_team_matches`,
+     timeseries `kickoff_utc`, smallest time grain `day`;
+   - one measure per Ossie metric, same name, expression from the
+     document's ANSI_SQL dialect: 11 measures;
+   - one dimension per Ossie field that is a non-time dimension on
+     `fct_team_matches` (`season_id`, `venue`, `result`), plus
+     `team_name` through the document's relationship to `dim_teams`:
+     4 dimensions. The time field becomes the timeseries. The entity
+     fields (`team`, `team_match`) are not dimensions;
+   - an Explore dashboard declared in the same file, with every
+     dimension and measure;
+   - a first-line comment saying the file is generated, and from what.
 
-   Dimensions:
-
-   | name | from |
-   |---|---|
-   | `season_id` | column `season_id` |
-   | `venue` | column `venue` |
-   | `result` | column `result` |
-   | `team_name` | the team's name from `marts.dim_teams` |
-
-   Measures, the eleven metrics of lesson 10, same names, with lesson
-   10's labels as display names:
-
-   | name | display name | means |
-   |---|---|---|
-   | `matches_played` | Played | rows |
-   | `points` | Points | sum of points |
-   | `goals_for` | Goals for | sum |
-   | `goals_against` | Goals against | sum |
-   | `goal_difference` | Goal difference | goals for minus goals against |
-   | `xg_for` | xG for | sum |
-   | `xg_against` | xG against | sum |
-   | `xg_difference` | xG difference | xG for minus xG against |
-   | `shots` | Shots | sum |
-   | `shots_on_target` | Shots on target | sum |
-   | `points_per_match` | Points per match | points over rows, summed first, divided after |
-
-   The Explore dashboard is declared inside the metrics view file, with
-   every dimension and measure.
-
+   The metric expressions in the document are qualified
+   (`SUM(fct_team_matches.points)`). Rill accepts that form when the
+   table it reads is named `fct_team_matches` (checked), and not
+   otherwise.
 4. `rill/apis/team_metrics.yaml`: a custom API that returns
    `season_id`, `team_name` and all eleven measures for every season
    and team: 36 rows (18 teams x 2 seasons).
@@ -176,7 +171,8 @@ The quoting in `--properties` is not decoration: see Reference.
 **Withheld:** how a dimension gets a name from another table. Rill's
 `lookup_table` feature is the obvious answer and it fails on DuckDB:
 `lookup tables are not supported for duckdb dialect` (checked on
-v0.90.2).
+v0.90.2). How the generator writes YAML that Rill accepts and that a
+diff can compare (key order, quoting).
 
 ---
 
@@ -229,8 +225,9 @@ rill parity 2026/2027: 18 teams, 0 differences
    - What Rill reads (the serving copy) holds every table in schema
      `marts`, published as one unit.
    - Rill's tables keep their dbt names, `fct_team_matches` and
-     `dim_teams`. The hard tier needs them (step 12).
-   - Lesson 12's API reads the same copy.
+     `dim_teams`, because the generated expressions are qualified with
+     them (step 3).
+   - Lesson 11c's page and lesson 12's API read the same copy.
 10. `mise run rill-parity`, with Rill running: for each season, fetch
     the `team_metrics` API and compare every team's eleven measures
     with `dawri metrics --metric` for all eleven (lesson 10), floats at
@@ -245,60 +242,34 @@ Whether the build or a new `dawri` step does it.
 
 ---
 
-## Hard (optional): one definition again
+## Hard (optional): the generated file cannot drift
 
 **Target output**
 
 ```
-$ mise run rill-sync
-wrote rill/metrics/team_matches.yaml: 11 measures, 4 dimensions, timeseries kickoff_utc
-
-$ git diff --exit-code rill/metrics/team_matches.yaml; echo $?
+$ mise run rill-sync -- --check; echo $?
 0
-
-$ rill validate rill
-...
-Validation completed successfully
-
-$ mise run rill-parity
-rill parity 2025/2026: 18 teams, 0 differences
-rill parity 2026/2027: 18 teams, 0 differences
 
 $ (branch: a measure expression edited by hand in team_matches.yaml, pushed)
 $ gh run list --limit 1
 completed  failure  ...    <- rill-sync: rill/metrics/team_matches.yaml is stale
+(branch deleted after)
 ```
 
 **Spec**
 
-12. `mise run rill-sync` generates `rill/metrics/team_matches.yaml`
-    from `semantic/dawri.ossie.yaml`. No measure expression is written
-    by hand anywhere in `rill/`.
-    - One measure per Ossie metric, same name, expression from the
-      document's ANSI_SQL dialect. 11 measures.
-    - One dimension per Ossie field that is a non-time dimension on
-      `fct_team_matches` (3), plus `team_name` through the document's
-      relationship to `dim_teams` (1): 4 dimensions. The time field
-      becomes the timeseries. The entity fields (`team`, `team_match`)
-      are not dimensions.
-    - The file starts with a comment saying it is generated and from
-      what.
-    - The metric expressions in the document are qualified
-      (`SUM(fct_team_matches.points)`). Rill accepts that form when the
-      table it reads is named `fct_team_matches` (checked), and not
-      otherwise.
-13. A check mode, `mise run rill-sync -- --check` (or a task of your
+12. A check mode, `mise run rill-sync -- --check` (or a task of your
     naming), regenerates in memory and exits 1 with
     `rill/metrics/team_matches.yaml is stale` when the committed file
-    differs. CI runs it on every push. Prove it red with the branch in
-    the target output, then delete the branch.
-14. In chat: lesson 10's step 7 found what the Ossie export lost. What
+    differs. It never writes the file. CI runs it on every push. Prove
+    it red with the branch in the target output, then delete the
+    branch.
+13. In chat: lesson 10's step 7 found what the Ossie export lost. What
     did your dashboard lose because of it, and where would you put it
     back without breaking "generated, never hand-edited"?
 
-**Withheld:** how the generator writes YAML Rill accepts and a diff can
-compare (key order, quoting). How the relationship becomes a dimension
-expression.
+**Withheld:** how the check compares without touching the committed
+file. Whether the check and the generator share one function.
 
 ---
 
@@ -383,7 +354,6 @@ Docs: docs.rilldata.com/reference/project-files/metrics-views,
   It prints no numbers.
 - Rill Developer also serves MCP at `localhost:9009/mcp` (tools
   `list_metrics_views`, `get_metrics_view`, `query_metrics_view`, ...).
-  Lesson 13 may use it.
 
 ### What Rill does with the database file (checked on v0.90.2)
 

@@ -5,7 +5,8 @@ Saudi Pro League data product, built lesson by lesson in
 
 Source: the Saudi Pro League's own API (`api-sdp.spl.com.sa/v1/spl/football`),
 Opta-fed, no key. 16 seasons back to 2011/12.
-Pipeline: raw JSON -> DuckDB -> dbt staging + marts -> Rill / FastAPI.
+Pipeline: raw JSON -> DuckDB -> dbt staging + marts -> Ossie -> Rill / Evidence / Streamlit,
+and Ossie -> FastAPI -> json-render.
 
 Tasks live in `tasks/`. Landed data lives in `data/` (gitignored).
 
