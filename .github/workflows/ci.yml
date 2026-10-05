@@ -44,3 +44,6 @@ jobs:
 
       - name: Rill sync check
         run: mise run rill-sync -- --check
+
+      - name: Evidence sync check
+        run: mise run evidence-sync -- --check
