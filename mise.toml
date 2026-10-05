@@ -1,7 +1,9 @@
 [env]
 DAWRI_DATA_DIR = "{{ get_env(name='DAWRI_DATA_DIR', default=config_root ~ '/data') }}"
+SEND_ANONYMOUS_USAGE_STATS = "no"  # Evidence telemetry off
 
 [vars]
+ossie_py = "apache-ossie @ git+https://github.com/apache/ossie@adfa9e4#subdirectory=python"
 ossie_convert = "uvx --from 'git+https://github.com/apache/ossie@adfa9e4#subdirectory=converters/dbt' ossie-dbt msi-to-ossie -i dbt/target/semantic_manifest.json --model-name dawri"
 
 [tasks.ossie]
@@ -32,6 +34,14 @@ run = [
 [tasks.rill-sync]
 description = "Regenerate rill/metrics/team_matches.yaml from the Ossie document"
 run = "./scripts/rill_sync.py"
+
+[tasks.evidence-sync]
+description = "Regenerate evidence/sources/dawri/*.sql from the Ossie document; --check"
+run = "uv run --with '{{vars.ossie_py}}' scripts/evidence_sync.py"
+
+[tasks.evidence-parity]
+description = "Fail if the Parquet the Evidence build ships disagrees with dawri metrics"
+run = "uv run scripts/evidence_parity.py"
 
 [tasks.rill-parity]
 description = "Fail if Rill's team_metrics API disagrees with dawri metrics (Rill running)"

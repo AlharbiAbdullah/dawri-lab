@@ -1,0 +1,4 @@
+name: dawri
+type: duckdb
+options:
+  filename: ':memory:'  # reads data/serving Parquet, never data/dawri.duckdb
