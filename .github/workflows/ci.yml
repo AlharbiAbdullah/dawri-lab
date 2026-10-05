@@ -47,3 +47,6 @@ jobs:
 
       - name: Evidence sync check
         run: mise run evidence-sync -- --check
+
+      - name: App check
+        run: mise run app-check
