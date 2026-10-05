@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NO_COLOR: "1"
+      MISE_DISABLE_TOOLS: "github:rilldata/rill"  # Rill runs locally, not in CI
     steps:
       - uses: actions/checkout@v5
 
@@ -40,3 +41,6 @@ jobs:
 
       - name: Semantic check
         run: mise run semantic-check
+
+      - name: Rill sync check
+        run: mise run rill-sync -- --check
