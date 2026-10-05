@@ -10,6 +10,7 @@ dependencies = [
     "pyarrow>=25.0.1",
     "pydantic>=2.13.5",
     "pyyaml>=6.0.3",
+    "streamlit>=1.65.0",
     "typer>=0.27.2",
 ]
 
@@ -44,7 +45,7 @@ extend-select = ["I", "UP", "S", "ANN", "PTH", "DTZ", "E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--disable-socket"
+addopts = "--disable-socket --allow-unix-socket"  # AppTest uses a Unix socket pair
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]

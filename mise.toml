@@ -43,6 +43,16 @@ run = "uv run --with '{{vars.ossie_py}}' scripts/evidence_sync.py"
 description = "Fail if the Parquet the Evidence build ships disagrees with dawri metrics"
 run = "uv run scripts/evidence_parity.py"
 
+[tasks.app-check]
+description = "Fail if src/dawri/app.py defines a metric: an aggregate or import duckdb"
+run = '''
+if grep -nEi '\b(sum|avg|count|min|max)\s*\(|^\s*(import|from)\s+duckdb' src/dawri/app.py; then
+  echo "app-check: src/dawri/app.py defines a metric"
+  exit 1
+fi
+echo "app-check: src/dawri/app.py defines no metric"
+'''
+
 [tasks.rill-parity]
 description = "Fail if Rill's team_metrics API disagrees with dawri metrics (Rill running)"
 run = "uv run scripts/rill_parity.py"
