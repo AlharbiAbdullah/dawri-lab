@@ -12,31 +12,19 @@ import sys
 from pathlib import Path
 
 import yaml
-from ossie.models import (  # ty: ignore[unresolved-import]
-    OssieDataset,
-    OssieDocument,
-    OssieExpression,
+from ossie.models import OssieDataset, OssieDocument  # ty: ignore[unresolved-import]
+from ossie_read import (  # ty: ignore[unresolved-import]
+    SOURCE,
+    ansi_sql,
+    dataset,
+    load,
+    table_name,
 )
 
-SOURCE = Path("semantic/dawri.ossie.yaml")
 TARGET = Path("rill/metrics/team_matches.yaml")
 MODELS = Path("rill/models")
 SERVING = "data/serving"  # relative to the repo root, where Rill runs
 FACT = "fct_team_matches"
-
-
-def ansi_sql(expression: OssieExpression) -> str:
-    for d in expression.dialects:
-        if d.dialect == "ANSI_SQL":
-            return d.expression
-    raise SystemExit(f"no ANSI_SQL dialect in {expression!r}")
-
-
-def dataset(doc: OssieDocument, name: str) -> OssieDataset:
-    for d in doc.datasets:
-        if d.name == name:
-            return d
-    raise SystemExit(f"no dataset {name} in the Ossie document")
 
 
 def time_field(fact: OssieDataset) -> str:
@@ -44,10 +32,6 @@ def time_field(fact: OssieDataset) -> str:
         if field.dimension and field.dimension.is_time:
             return ansi_sql(field.expression)
     raise SystemExit(f"no time dimension on {fact.name}")
-
-
-def table_name(ds: OssieDataset) -> str:
-    return ds.source.split(".")[-1].strip('"')
 
 
 def parquet(table: str) -> str:
@@ -130,7 +114,7 @@ def main() -> int:
     check = "--check" in args
     paths = [a for a in args if a != "--check"]
     source = Path(paths[0]) if paths else SOURCE
-    doc = OssieDocument.model_validate(yaml.safe_load(source.read_text()))
+    doc = load(source)
     files = render(doc, source)
     if check:
         stale = [
