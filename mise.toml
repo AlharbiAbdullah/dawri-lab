@@ -28,3 +28,15 @@ run = [
   ''',
   "uv run scripts/parity.py",
 ]
+
+[tasks.rill-sync]
+description = "Regenerate rill/metrics/team_matches.yaml from the Ossie document"
+run = "./scripts/rill_sync.py"
+
+[tasks.rill-parity]
+description = "Fail if Rill's team_metrics API disagrees with dawri metrics (Rill running)"
+run = "uv run scripts/rill_parity.py"
+
+
+[tools]
+"github:rilldata/rill" = "0.90.2"

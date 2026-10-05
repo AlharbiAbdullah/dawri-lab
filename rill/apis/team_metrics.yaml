@@ -1,0 +1,6 @@
+type: api
+metrics_sql: >
+  SELECT season_id, team_name,
+    goal_difference, goals_against, goals_for, matches_played, points,
+    points_per_match, shots, shots_on_target, xg_against, xg_difference, xg_for
+  FROM team_matches

@@ -9,3 +9,4 @@ dbt/.user.yml
 dev_testing/
 logs/
 visual/
+rill/tmp/

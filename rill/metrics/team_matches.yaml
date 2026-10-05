@@ -1,0 +1,45 @@
+# Generated from semantic/dawri.ossie.yaml by scripts/rill_sync.py. Do not edit.
+version: 1
+type: metrics_view
+model: fct_team_matches
+timeseries: kickoff_utc
+smallest_time_grain: day
+dimensions:
+- name: season_id
+  column: season_id
+- name: venue
+  column: venue
+- name: result
+  column: result
+- name: team_name
+  expression: (SELECT dim_teams.team_name FROM read_parquet('data/serving/dim_teams.parquet') AS dim_teams WHERE dim_teams.team_id = fct_team_matches.team_id)
+measures:
+- name: goal_difference
+  expression: SUM(fct_team_matches.goals_for) - SUM(fct_team_matches.goals_against)
+- name: goals_against
+  expression: SUM(fct_team_matches.goals_against)
+- name: goals_for
+  expression: SUM(fct_team_matches.goals_for)
+- name: matches_played
+  expression: SUM(1)
+- name: points
+  expression: SUM(fct_team_matches.points)
+- name: points_per_match
+  expression: (SUM(fct_team_matches.points)) / (SUM(1))
+- name: shots
+  expression: SUM(fct_team_matches.shots)
+- name: shots_on_target
+  expression: SUM(fct_team_matches.shots_on_target)
+- name: xg_against
+  expression: SUM(fct_team_matches.xg_against)
+- name: xg_difference
+  expression: SUM(fct_team_matches.xg_for) - SUM(fct_team_matches.xg_against)
+- name: xg_for
+  expression: SUM(fct_team_matches.xg_for)
+explore:
+  dimensions: '*'
+  measures: '*'
+  defaults:
+    time_range: inf
+cache:
+  enabled: false

@@ -9,7 +9,7 @@ from typing import Annotated
 
 import typer
 
-from dawri import config, ingest, load, semantic
+from dawri import config, ingest, load, publish, semantic
 
 app = typer.Typer()
 
@@ -103,6 +103,8 @@ def build_() -> None:
         if result.returncode != 0:
             log.error("build failed: dbt exited %s", result.returncode)
             raise typer.Exit(code=result.returncode)
+    with step("publish"):
+        publish.publish()
 
 
 @app.command(name="metrics")
