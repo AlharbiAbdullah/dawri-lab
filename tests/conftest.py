@@ -58,6 +58,7 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     folder.mkdir()
     monkeypatch.setattr(config, "DATA_DIR", folder)
     monkeypatch.setattr(config, "DB_PATH", folder / "dawri.duckdb")
+    monkeypatch.setattr(config, "SERVING_DIR", folder / "serving")
     monkeypatch.setattr(config, "LOG_PATH", tmp_path / "dawri.log")
     monkeypatch.setattr(config, "REQUEST_GAP", 0)
     return folder

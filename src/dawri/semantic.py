@@ -7,6 +7,7 @@ from pathlib import Path
 import duckdb
 import yaml
 
+from dawri import config
 from dawri.config import DB_PATH, ROOT, SEASONS
 
 DOC_PATH = ROOT / "semantic" / "dawri.ossie.yaml"
@@ -32,7 +33,35 @@ def connect(
     db_path: Path = DB_PATH, doc_path: Path = DOC_PATH
 ) -> duckdb.DuckDBPyConnection:
     """Read-only connection with the ossie extension and the document loaded."""
-    con = duckdb.connect(str(db_path), read_only=True)
+    return with_ossie(duckdb.connect(str(db_path), read_only=True), doc_path)
+
+
+def connect_serving(
+    serving: Path | None = None, doc_path: Path = DOC_PATH
+) -> duckdb.DuckDBPyConnection:
+    """The serving copy, for readers beside the build: no file lock, no half build.
+
+    An in-memory catalog named `dawri` (the document's sources are
+    dawri.marts.<table>) with one view per Parquet file. Each query re-reads
+    the files through the serving symlink, so a publish shows on the next query.
+    """
+    serving = serving or config.SERVING_DIR
+    con = duckdb.connect()
+    con.execute("ATTACH ':memory:' AS dawri")
+    con.execute("USE dawri")
+    con.execute("CREATE SCHEMA marts")
+    for path in sorted(serving.glob("*.parquet")):
+        source = str(path).replace("'", "''")
+        con.execute(
+            f"CREATE VIEW marts.{path.stem} AS SELECT * FROM read_parquet('{source}')"  # noqa: S608
+        )
+    return with_ossie(con, doc_path)
+
+
+def with_ossie(
+    con: duckdb.DuckDBPyConnection, doc_path: Path
+) -> duckdb.DuckDBPyConnection:
+    """Load the ossie extension and the document into an open connection."""
     try:
         con.execute("LOAD ossie")
     except duckdb.Error:
@@ -47,11 +76,20 @@ def connect(
 
 
 def team_metrics(
-    con: duckdb.DuckDBPyConnection, season: str, metrics: list[str] | None = None
+    con: duckdb.DuckDBPyConnection,
+    season: str,
+    metrics: list[str] | None = None,
+    team: str | None = None,
+    by: list[str] | None = None,
 ) -> tuple[list[str], list[tuple]]:
-    """One row per team with a finished match in the season. Returns (header, rows)."""
+    """One row per team with a finished match in the season. Returns (header, rows).
+
+    team keeps one team's rows. by adds dimensions from the document
+    (e.g. "fct_team_matches.venue"): one row per team and value, after the name.
+    """
     explicit = bool(metrics)
     metrics = list(metrics) if metrics else DEFAULT_METRICS
+    by = list(by or [])
 
     known = {
         name for (name,) in con.execute("SELECT name FROM ossie_metrics()").fetchall()
@@ -61,26 +99,29 @@ def team_metrics(
             raise UnknownMetric(metric)
 
     season_id = SEASONS[season].replace("'", "''")
-    season_filter = f"fct_team_matches.season_id = '{season_id}'"
+    filters = [f"fct_team_matches.season_id = '{season_id}'"]
+    if team is not None:
+        filters.append(f"{TEAM_NAME} = '{team.replace("'", "''")}'")
 
     rel = con.execute(
-        "SELECT * FROM ossie_query(?, ?, ?)", [metrics, [TEAM_NAME], [season_filter]]
+        "SELECT * FROM ossie_query(?, ?, ?)", [metrics, [TEAM_NAME, *by], filters]
     )
     columns = [col[0] for col in rel.description]
     raw = rel.fetchall()
 
-    # Reorder to team_name + metrics in the order asked,
+    # Reorder to team_name + by + metrics in the order asked,
     # whatever order the extension returns.
-    positions = [columns.index(TEAM_NAME)] + [columns.index(m) for m in metrics]
+    keys = [TEAM_NAME, *by]
+    positions = [columns.index(k) for k in keys] + [columns.index(m) for m in metrics]
     rows = [tuple(row[i] for i in positions) for row in raw]
 
     # Default: points, then goal difference, both descending, then name.
     # With --metric: the first metric descending, then name.
     sort_by = [metrics[0]] if explicit else ["points", "goal_difference"]
-    sort_idx = [1 + metrics.index(m) for m in sort_by]
-    rows.sort(key=lambda row: tuple(-row[i] for i in sort_idx) + (row[0],))
+    sort_idx = [len(keys) + metrics.index(m) for m in sort_by]
+    rows.sort(key=lambda row: tuple(-row[i] for i in sort_idx) + row[: len(keys)])
 
-    return ["team_name", *metrics], rows
+    return ["team_name", *(b.split(".")[-1] for b in by), *metrics], rows
 
 
 def format_value(value: object) -> str:

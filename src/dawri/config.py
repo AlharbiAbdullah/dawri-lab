@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.environ.get("DAWRI_DATA_DIR", ROOT / "data"))
 DB_PATH: Path = DATA_DIR / "dawri.duckdb"
+SERVING_DIR: Path = DATA_DIR / "serving"  # Parquet copy that dawri build publishes
 DBT_DIR: Path = ROOT / "dbt"
 LOG_PATH: Path = ROOT / "logs" / "dawri.log"
 

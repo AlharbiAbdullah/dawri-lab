@@ -52,12 +52,12 @@ def swap(link: Path, folder: Path) -> Path | None:
 
 def publish() -> list[str]:
     """Export the marts and make them the serving copy. Keeps one older copy."""
-    link = config.DATA_DIR / "serving"
-    folder = config.DATA_DIR / f"serving-{time.time_ns()}"
+    link = config.SERVING_DIR
+    folder = link.with_name(f"{link.name}-{time.time_ns()}")
     tables = export(config.DB_PATH, folder)
     previous = swap(link, folder)
     # The copy before the previous one: no reader can still hold it open by name.
-    for old in config.DATA_DIR.glob("serving-*"):
+    for old in link.parent.glob(f"{link.name}-*"):
         if old.resolve() not in (folder.resolve(), previous):
             shutil.rmtree(old)
     log.info("publish: %s tables to %s", len(tables), folder.name)
