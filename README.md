@@ -8,8 +8,8 @@ Status: working · learning build, one lesson per file in [tasks/](tasks/) · 20
 
 ## What it does
 
-Answers factual questions about the league: the strongest team by evidence, the best
-players per position (per 90, with a minutes floor), value for money.
+Answers factual questions about the league: the strongest team by evidence, and the best
+players per position (per 90, with a minutes floor).
 
 ## How it works
 
