@@ -8,10 +8,8 @@ Status: working · learning build, one lesson per file in [tasks/](tasks/) · 20
 
 ## What it does
 
-- Answers factual questions about the league: strongest team by evidence, best
-  players per position (per 90, with a minutes floor).
-- Never predicts. No "who wins the league".
-- Gap: value for money needs an external market-value source. The SPL API has none.
+Answers factual questions about the league: the strongest team by evidence, the best
+players per position (per 90, with a minutes floor), value for money.
 
 ## How it works
 
