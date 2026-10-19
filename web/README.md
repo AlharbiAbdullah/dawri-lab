@@ -36,3 +36,11 @@ proxy belongs to Vite; hosting the built files is outside this lesson.
 `mise run web-contract` builds the recorded fixture database, exports actual
 FastAPI responses for both seasons to a temporary file, and passes them through
 the frontend validators. It runs offline in CI and reads no real `data/`.
+
+Other readers, from the repo root:
+
+```sh
+uv run streamlit run src/dawri/app.py         # app on localhost:8501
+rill start rill                              # dashboard
+cd evidence && npm install && npm run sources && npm run dev  # report
+```
