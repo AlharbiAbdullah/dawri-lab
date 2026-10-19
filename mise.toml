@@ -57,6 +57,10 @@ echo "app-check: src/dawri/app.py defines no metric"
 description = "Fail if Rill's team_metrics API disagrees with dawri metrics (Rill running)"
 run = "uv run scripts/rill_parity.py"
 
+[tasks.openapi]
+description = "Regenerate docs/openapi.json from the FastAPI response models"
+run = "uv run python -c 'from dawri.api import write_openapi; write_openapi()'"
+
 
 [tools]
 "github:rilldata/rill" = "0.90.2"

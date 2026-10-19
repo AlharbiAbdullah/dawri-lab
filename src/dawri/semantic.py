@@ -42,19 +42,23 @@ def connect_serving(
     """The serving copy, for readers beside the build: no file lock, no half build.
 
     An in-memory catalog named `dawri` (the document's sources are
-    dawri.marts.<table>) with one view per Parquet file. Each query re-reads
-    the files through the serving symlink, so a publish shows on the next query.
+    dawri.marts.<table>) with one view per Parquet file. By default queries
+    follow the serving symlink, so a publish shows on the next query. Pass a
+    resolved generation directory to keep a request on one published copy.
     """
     serving = serving or config.SERVING_DIR
     con = duckdb.connect()
     con.execute("ATTACH ':memory:' AS dawri")
     con.execute("USE dawri")
-    con.execute("CREATE SCHEMA marts")
-    for path in sorted(serving.glob("*.parquet")):
-        source = str(path).replace("'", "''")
-        con.execute(
-            f"CREATE VIEW marts.{path.stem} AS SELECT * FROM read_parquet('{source}')"  # noqa: S608
-        )
+    for schema in ("marts", "staging"):
+        con.execute(f"CREATE SCHEMA {schema}")
+        directory = serving if schema == "marts" else serving / schema
+        for path in sorted(directory.glob("*.parquet")):
+            source = str(path).replace("'", "''")
+            con.execute(
+                f"CREATE VIEW {schema}.{path.stem}"  # noqa: S608
+                f" AS SELECT * FROM read_parquet('{source}')"
+            )
     return with_ossie(con, doc_path)
 
 

@@ -8,8 +8,10 @@ from contextlib import contextmanager
 from typing import Annotated
 
 import typer
+import uvicorn
 
 from dawri import config, ingest, load, publish, semantic
+from dawri.api import app as api_app
 
 app = typer.Typer()
 
@@ -134,3 +136,11 @@ def run_(season: ingest.Season) -> None:
         ingest_(season)
         load_()
         build_()
+
+
+@app.command(name="serve")
+def serve_(
+    port: Annotated[int, typer.Option(min=1, max=65535)] = 8000,
+) -> None:
+    """Serve seasons and standings over HTTP."""
+    uvicorn.run(api_app, host="127.0.0.1", port=port, log_config=None)

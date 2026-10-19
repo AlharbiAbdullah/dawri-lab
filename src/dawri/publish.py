@@ -3,6 +3,7 @@
 Readers open data/serving/<table>.parquet. data/serving is a symlink to one
 serving-<ns> folder; a publish writes a new folder, then swaps the link with one
 rename, so a reader sees the old marts or the new ones, never half of each.
+The API's staging tables are exported into that folder's staging/ subdirectory.
 """
 
 import logging
@@ -17,10 +18,11 @@ from dawri import config
 log = logging.getLogger("dawri")
 
 SCHEMA = "marts"
+STAGING_TABLES = ("stg_matches", "stg_lineups")
 
 
 def export(db_path: Path, folder: Path) -> list[str]:
-    """Write every table in SCHEMA to folder/<table>.parquet. Returns the names."""
+    """Export all marts plus the staging tables the API needs. Returns the names."""
     folder.mkdir(parents=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -32,12 +34,16 @@ def export(db_path: Path, folder: Path) -> list[str]:
                 [SCHEMA],
             ).fetchall()
         ]
-        for table in tables:
-            target = folder / f"{table}.parquet"
-            con.execute(f"COPY {SCHEMA}.{table} TO '{target}' (FORMAT parquet)")
+        sources = [(SCHEMA, table) for table in tables]
+        sources.extend(("staging", table) for table in STAGING_TABLES)
+        for schema, table in sources:
+            directory = folder if schema == SCHEMA else folder / schema
+            directory.mkdir(exist_ok=True)
+            target = directory / f"{table}.parquet"
+            con.execute(f"COPY {schema}.{table} TO ? (FORMAT parquet)", [str(target)])
     finally:
         con.close()
-    return tables
+    return tables + [f"staging.{table}" for table in STAGING_TABLES]
 
 
 def swap(link: Path, folder: Path) -> Path | None:
