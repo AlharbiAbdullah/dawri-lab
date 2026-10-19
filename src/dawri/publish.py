@@ -18,7 +18,7 @@ from dawri import config
 log = logging.getLogger("dawri")
 
 SCHEMA = "marts"
-STAGING_TABLES = ("stg_matches", "stg_lineups")
+STAGING_TABLES = ("stg_matches", "stg_lineups", "stg_matchdays")
 
 
 def export(db_path: Path, folder: Path) -> list[str]:

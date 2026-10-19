@@ -106,15 +106,8 @@ select
     {{ dbt_utils.generate_surrogate_key(['season_id', 'type', 'team_id']) }} as standing_key,
     season_id,
     type,
-    cast(row_number() over (
-        partition by season_id, type
-        order by
-            points              desc,
-            h2h_points          desc,
-            h2h_goal_difference desc,
-            goal_difference     desc,
-            goals_for           desc
-    ) as integer)                          as rank,
+    cast(row_number() over sporting as integer) as rank,
+    cast(rank() over sporting as integer) as shared_rank,
     team_id,
     team_name,
     cast(played          as integer) as played,
@@ -126,3 +119,12 @@ select
     cast(goal_difference as integer) as goal_difference,
     cast(points          as integer) as points
 from ranked
+window sporting as (
+        partition by season_id, type
+        order by
+            points              desc,
+            h2h_points          desc,
+            h2h_goal_difference desc,
+            goal_difference     desc,
+            goals_for           desc
+)

@@ -32,10 +32,14 @@ measures:
   expression: SUM(fct_team_matches.shots_on_target)
 - name: xg_against
   expression: SUM(fct_team_matches.xg_against)
+- name: xg_against_per_match
+  expression: (SUM(fct_team_matches.xg_against)) / (SUM(1))
 - name: xg_difference
   expression: SUM(fct_team_matches.xg_for) - SUM(fct_team_matches.xg_against)
 - name: xg_for
   expression: SUM(fct_team_matches.xg_for)
+- name: xg_for_per_match
+  expression: (SUM(fct_team_matches.xg_for)) / (SUM(1))
 explore:
   dimensions: '*'
   measures: '*'

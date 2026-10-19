@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Dawri daily at 06:00 Riyadh
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 Asia/Riyadh
+Persistent=true
+Unit=dawri.service
+
+[Install]
+WantedBy=timers.target

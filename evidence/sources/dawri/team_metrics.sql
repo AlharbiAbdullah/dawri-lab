@@ -11,8 +11,10 @@ SELECT
     SUM(fct_team_matches.shots) AS shots,
     SUM(fct_team_matches.shots_on_target) AS shots_on_target,
     SUM(fct_team_matches.xg_against) AS xg_against,
+    (SUM(fct_team_matches.xg_against)) / (SUM(1)) AS xg_against_per_match,
     SUM(fct_team_matches.xg_for) - SUM(fct_team_matches.xg_against) AS xg_difference,
-    SUM(fct_team_matches.xg_for) AS xg_for
+    SUM(fct_team_matches.xg_for) AS xg_for,
+    (SUM(fct_team_matches.xg_for)) / (SUM(1)) AS xg_for_per_match
 FROM read_parquet('../data/serving/fct_team_matches.parquet') AS fct_team_matches
 LEFT JOIN read_parquet('../data/serving/dim_teams.parquet') AS dim_teams
     ON dim_teams.team_id = fct_team_matches.team_id

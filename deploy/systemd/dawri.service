@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh Dawri and act on newly landed facts
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/dawri-lab
+Environment=PATH=%h/.local/bin:%h/.local/share/mise/shims:/usr/local/bin:/usr/bin
+Environment=DAWRI_DATA_DIR=%h/projects/dawri-lab/data
+ExecStart=%h/.local/share/mise/shims/uv run dawri run 2026/2027
+ExecStart=%h/.local/share/mise/shims/uv run dawri act
+TimeoutStartSec=30min

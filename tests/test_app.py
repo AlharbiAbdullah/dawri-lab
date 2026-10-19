@@ -86,6 +86,8 @@ def test_team_page_order_and_decimals(app: AppTest) -> None:
         "xg_for",
         "xg_against",
         "xg_difference",
+        "xg_for_per_match",
+        "xg_against_per_match",
         "shots",
         "shots_on_target",
     ]

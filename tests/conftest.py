@@ -127,6 +127,7 @@ def build_standings(data_dir: Path) -> None:
             "+fct_team_matches",
             "+fct_goals",
             "stg_lineups",
+            "stg_matchdays",
             "--threads",
             "1",
             "--no-send-anonymous-usage-stats",

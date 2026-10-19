@@ -10,7 +10,7 @@ from typing import Annotated
 import typer
 import uvicorn
 
-from dawri import config, ingest, load, publish, semantic
+from dawri import act, brief, config, ingest, load, publish, semantic
 from dawri.api import app as api_app
 
 app = typer.Typer()
@@ -144,3 +144,15 @@ def serve_(
 ) -> None:
     """Serve seasons and standings over HTTP."""
     uvicorn.run(api_app, host="127.0.0.1", port=port, log_config=None)
+
+
+@app.command(name="brief")
+def brief_(season: ingest.Season, prose: bool = False) -> None:
+    with step("brief", season.value):
+        brief.write_brief(season.value, prose)
+
+
+@app.command(name="act")
+def act_(initialize: Annotated[bool, typer.Option("--init")] = False) -> None:
+    with step("act"):
+        act.run(initialize)

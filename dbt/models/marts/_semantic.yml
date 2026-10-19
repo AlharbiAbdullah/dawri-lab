@@ -109,6 +109,17 @@ models:
         numerator: points
         denominator: matches_played
 
+      - name: xg_for_per_match
+        type: ratio
+        label: xG for per match
+        numerator: xg_for
+        denominator: matches_played
+      - name: xg_against_per_match
+        type: ratio
+        label: xG against per match
+        numerator: xg_against
+        denominator: matches_played
+
   - name: dim_teams
     semantic_model:
       enabled: true
