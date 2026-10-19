@@ -1,6 +1,35 @@
 {
   "components": {
     "schemas": {
+      "Column": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "enum": [
+              "text",
+              "integer",
+              "decimal"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "format"
+        ],
+        "title": "Column",
+        "type": "object"
+      },
       "Goal": {
         "properties": {
           "additional_minutes": {
@@ -164,6 +193,119 @@
         "title": "MatchTeam",
         "type": "object"
       },
+      "MetricsProps": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMetrics"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "title": {
+            "const": "Team metrics",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "columns",
+          "rows"
+        ],
+        "title": "MetricsProps",
+        "type": "object"
+      },
+      "PageElement": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "props": {
+            "$ref": "#/components/schemas/PageProps"
+          },
+          "type": {
+            "const": "Page",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "props",
+          "children"
+        ],
+        "title": "PageElement",
+        "type": "object"
+      },
+      "PageProps": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "PageProps",
+        "type": "object"
+      },
+      "PageSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "elements": {
+            "additionalProperties": {
+              "discriminator": {
+                "mapping": {
+                  "Page": "#/components/schemas/PageElement",
+                  "Table": "#/components/schemas/TableElement",
+                  "Text": "#/components/schemas/TextElement"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PageElement"
+                },
+                {
+                  "$ref": "#/components/schemas/TextElement"
+                },
+                {
+                  "$ref": "#/components/schemas/TableElement"
+                }
+              ]
+            },
+            "title": "Elements",
+            "type": "object"
+          },
+          "root": {
+            "const": "page",
+            "title": "Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root",
+          "elements"
+        ],
+        "title": "PageSpec",
+        "type": "object"
+      },
       "SeasonSummary": {
         "properties": {
           "finished": {
@@ -250,6 +392,80 @@
         "title": "Standing",
         "type": "object"
       },
+      "StandingsProps": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/Standing"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "title": {
+            "const": "Standings",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "columns",
+          "rows"
+        ],
+        "title": "StandingsProps",
+        "type": "object"
+      },
+      "TableElement": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 0,
+            "title": "Children",
+            "type": "array"
+          },
+          "props": {
+            "discriminator": {
+              "mapping": {
+                "Standings": "#/components/schemas/StandingsProps",
+                "Team metrics": "#/components/schemas/MetricsProps"
+              },
+              "propertyName": "title"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StandingsProps"
+              },
+              {
+                "$ref": "#/components/schemas/MetricsProps"
+              }
+            ],
+            "title": "Props"
+          },
+          "type": {
+            "const": "Table",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "props",
+          "children"
+        ],
+        "title": "TableElement",
+        "type": "object"
+      },
       "TeamMetrics": {
         "additionalProperties": {
           "anyOf": [
@@ -271,6 +487,48 @@
           "team_name"
         ],
         "title": "TeamMetrics",
+        "type": "object"
+      },
+      "TextElement": {
+        "additionalProperties": false,
+        "properties": {
+          "children": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 0,
+            "title": "Children",
+            "type": "array"
+          },
+          "props": {
+            "$ref": "#/components/schemas/TextProps"
+          },
+          "type": {
+            "const": "Text",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "props",
+          "children"
+        ],
+        "title": "TextElement",
+        "type": "object"
+      },
+      "TextProps": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "TextProps",
         "type": "object"
       },
       "ValidationError": {
@@ -518,6 +776,46 @@
           }
         },
         "summary": "Standings"
+      }
+    },
+    "/seasons/{season}/view": {
+      "get": {
+        "description": "Describe a season page using one published generation.",
+        "operationId": "season_view_seasons__season__view_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "season",
+            "required": true,
+            "schema": {
+              "title": "Season",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageSpec"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Season View"
       }
     }
   }

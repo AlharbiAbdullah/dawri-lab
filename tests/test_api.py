@@ -1,16 +1,13 @@
 import json
 import logging
-import os
 import re
 import shutil
-import subprocess
-from collections.abc import Iterator
 from pathlib import Path
 
 import duckdb
 import pytest
 import uvicorn
-from conftest import RECORDED
+from conftest import RECORDED, build_standings
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
@@ -33,72 +30,6 @@ FIELDS = [
 ]
 FIRST = dict(zip(FIELDS, [1, "NEOM SC", 1, 1, 0, 0, 2, 0, 2, 3], strict=True))
 LAST = dict(zip(FIELDS, [4, "Al Faisaly", 1, 0, 0, 1, 0, 2, -2, 0], strict=True))
-
-
-def build_standings(data_dir: Path) -> None:
-    """Build the API's real dbt models, keeping all outputs in the temp folder."""
-    folder = data_dir.parent
-    dbt = shutil.which("dbt")
-    assert dbt is not None, "dbt must be installed to build the recorded marts"
-    result = subprocess.run(  # noqa: S603
-        [
-            dbt,
-            "run",
-            "--project-dir",
-            str(config.DBT_DIR),
-            "--profiles-dir",
-            str(config.DBT_DIR),
-            "--target-path",
-            str(folder / "target"),
-            "--log-path",
-            str(folder / "logs"),
-            "--select",
-            "+mart_standings",
-            "+dim_teams",
-            "+fct_team_matches",
-            "+fct_goals",
-            "stg_lineups",
-            "--threads",
-            "1",
-            "--no-send-anonymous-usage-stats",
-            "--no-version-check",
-            "--quiet",
-        ],
-        env={**os.environ, "DAWRI_DATA_DIR": str(data_dir)},
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-
-
-@pytest.fixture(scope="module")
-def api_database(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Build the real standings mart once, using only the recorded SPL responses."""
-    data_dir = tmp_path_factory.mktemp("api") / "data"
-    shutil.copytree(RECORDED, data_dir)
-    db_path = data_dir / "dawri.duckdb"
-    with duckdb.connect() as con:
-        con.execute(
-            "LOAD ossie"
-        )  # Cache is prepared before pytest, never download here.
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(config, "DATA_DIR", data_dir)
-        patch.setattr(config, "DB_PATH", db_path)
-        patch.setattr(config, "SERVING_DIR", data_dir / "serving")
-        load.main()
-        build_standings(data_dir)
-        publish.publish()
-    return db_path
-
-
-@pytest.fixture
-def client(api_database: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    monkeypatch.setattr(config, "DB_PATH", api_database)
-    monkeypatch.setattr(config, "SERVING_DIR", api_database.parent / "serving")
-    with TestClient(app) as client:
-        yield client
 
 
 def test_health(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

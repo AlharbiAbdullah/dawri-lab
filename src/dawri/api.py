@@ -9,9 +9,11 @@ from typing import Annotated, Any, Literal
 import duckdb
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, Response
 from fastapi.routing import APIRoute
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from dawri import config, semantic
+from dawri import config, semantic, ui
+from dawri.api_models import SeasonSummary, Standing, TeamMetrics
+from dawri.ui_models import PageSpec
 
 
 class ConditionalRoute(APIRoute):
@@ -46,31 +48,6 @@ app.router.route_class = ConditionalRoute
 
 class Health(BaseModel, strict=True):
     status: Literal["ok"]
-
-
-class SeasonSummary(BaseModel, strict=True):
-    season: str
-    season_id: str
-    finished: int
-    upcoming: int
-
-
-class Standing(BaseModel, strict=True):
-    rank: int
-    team_name: str
-    played: int
-    won: int
-    drawn: int
-    lost: int
-    goals_for: int
-    goals_against: int
-    goal_difference: int
-    points: int
-
-
-class TeamMetrics(BaseModel, extra="allow", strict=True):
-    team_name: str
-    __pydantic_extra__: dict[str, int | float] = Field(init=False)
 
 
 class MatchTeam(BaseModel, strict=True):
@@ -120,6 +97,16 @@ def season_name(season: str) -> str:
 def health() -> Health:
     """Report that the server is running without querying the database."""
     return Health(status="ok")
+
+
+@app.get("/seasons/{season}/view")
+def season_view(season: str, con: Connection) -> PageSpec:
+    """Describe a season page using one published generation."""
+    name = season_name(season)
+    summary = next(summary for summary in seasons(con) if summary.season == name)
+    return ui.season_page(
+        summary, standings(season, con), metrics(season, con, ui.METRICS)
+    )
 
 
 @app.get("/seasons")
