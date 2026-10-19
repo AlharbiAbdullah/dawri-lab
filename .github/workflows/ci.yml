@@ -21,7 +21,10 @@ jobs:
         run: echo "DAWRI_DATA_DIR=$RUNNER_TEMP/data" >> "$GITHUB_ENV"
 
       - name: Install
-        run: uv sync --locked
+        run: |
+          uv sync --locked
+          uv run dbt deps --project-dir dbt --profiles-dir dbt
+          uv run python -c "import duckdb; duckdb.connect().execute('INSTALL ossie FROM community')"
 
       - name: Lint
         run: uv run ruff check src tests
@@ -36,7 +39,6 @@ jobs:
         run: |
           cp -r tests/fixtures/recorded "$DAWRI_DATA_DIR"
           uv run dawri load
-          uv run dbt deps --project-dir dbt --profiles-dir dbt
           uv run dbt build --project-dir dbt --profiles-dir dbt --exclude tag:full_data
 
       - name: Semantic check
