@@ -61,6 +61,20 @@ run = "uv run scripts/rill_parity.py"
 description = "Regenerate docs/openapi.json from the FastAPI response models"
 run = "uv run python -c 'from dawri.api import write_openapi; write_openapi()'"
 
+[tasks.web-check]
+description = "Check the React page: tests, types, build, lint and formatting"
+dir = "web"
+run = [
+  "npm test -- --run",
+  "npm run build",
+  "npm run lint",
+  "npm run format:check",
+]
+
+
+[tasks.web-contract]
+description = "Validate recorded Python page responses against the React catalog"
+run = "uv run python scripts/check_view_contract.py"
 
 [tools]
 "github:rilldata/rill" = "0.90.2"
